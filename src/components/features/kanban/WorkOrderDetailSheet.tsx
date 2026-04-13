@@ -2,8 +2,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import {
-  Play,
-  CheckCircle,
   Trash2,
   Package,
   User,
