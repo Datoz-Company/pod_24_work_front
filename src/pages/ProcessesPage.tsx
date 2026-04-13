@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Edit, Trash2, GripVertical } from 'lucide-react'
+import { Plus, Edit, Trash2, GripVertical, Lock } from 'lucide-react'
 import { processService } from '@/services/processService'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -20,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { toast } from 'sonner'
 import type { Process, ProcessCreateRequest } from '@/types'
 
 export function ProcessesPage() {
@@ -40,7 +42,11 @@ export function ProcessesPage() {
     mutationFn: processService.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['processes'] })
+      toast.success('공정이 추가되었습니다')
       closeDialog()
+    },
+    onError: () => {
+      toast.error('공정 추가에 실패했습니다')
     },
   })
 
@@ -49,7 +55,12 @@ export function ProcessesPage() {
       processService.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['processes'] })
+      toast.success('공정이 수정되었습니다')
       closeDialog()
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.message || '공정 수정에 실패했습니다'
+      toast.error(message)
     },
   })
 
@@ -57,6 +68,11 @@ export function ProcessesPage() {
     mutationFn: processService.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['processes'] })
+      toast.success('공정이 삭제되었습니다')
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.message || '공정 삭제에 실패했습니다'
+      toast.error(message)
     },
   })
 
@@ -67,6 +83,11 @@ export function ProcessesPage() {
   }
 
   const openEditDialog = (process: Process) => {
+    // 시스템 공정은 수정 불가
+    if (process.isSystem) {
+      toast.error('시스템 공정은 수정할 수 없습니다')
+      return
+    }
     setEditingProcess(process)
     setFormData({ name: process.name, color: process.color })
     setIsDialogOpen(true)
@@ -81,71 +102,111 @@ export function ProcessesPage() {
     }
   }
 
-  const handleDelete = (id: number) => {
+  const handleDelete = (process: Process) => {
+    // 시스템 공정은 삭제 불가
+    if (process.isSystem) {
+      toast.error('시스템 공정은 삭제할 수 없습니다')
+      return
+    }
     if (window.confirm('이 공정을 삭제하시겠습니까?')) {
-      deleteMutation.mutate(id)
+      deleteMutation.mutate(process.id)
+    }
+  }
+
+  // 시스템 공정 타입에 따른 라벨
+  const getSystemLabel = (systemType?: string) => {
+    switch (systemType) {
+      case 'PENDING':
+        return '시작'
+      case 'COMPLETED':
+        return '완료'
+      default:
+        return '시스템'
     }
   }
 
   return (
-    <div className="p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">공정 관리</h1>
-        <Button onClick={() => setIsDialogOpen(true)}>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">공정 관리</h1>
+          <p className="text-gray-500 mt-1">작업 공정을 추가하고 관리합니다</p>
+        </div>
+        <Button onClick={() => setIsDialogOpen(true)} className="bg-gradient-pod24 hover:opacity-90">
           <Plus className="mr-2 h-4 w-4" />
           공정 추가
         </Button>
       </div>
 
       {isLoading ? (
-        <div className="text-center text-muted-foreground">로딩 중...</div>
+        <div className="text-center py-8 text-gray-500">로딩 중...</div>
       ) : (
-        <div className="rounded-lg border bg-white">
+        <div className="rounded-lg border bg-white shadow-sm">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead className="w-12"></TableHead>
-                <TableHead>순서</TableHead>
+                <TableHead className="w-16">순서</TableHead>
                 <TableHead>공정명</TableHead>
-                <TableHead>색상</TableHead>
-                <TableHead className="w-24">작업</TableHead>
+                <TableHead className="w-32">색상</TableHead>
+                <TableHead className="w-24 text-center">작업</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {processes.map((process) => (
-                <TableRow key={process.id}>
+                <TableRow
+                  key={process.id}
+                  className={process.isSystem ? 'bg-gray-50' : ''}
+                >
                   <TableCell>
-                    <GripVertical className="h-4 w-4 cursor-grab text-muted-foreground" />
+                    {process.isSystem ? (
+                      <Lock className="h-4 w-4 text-gray-400" />
+                    ) : (
+                      <GripVertical className="h-4 w-4 cursor-grab text-gray-400" />
+                    )}
                   </TableCell>
-                  <TableCell>{process.displayOrder}</TableCell>
-                  <TableCell className="font-medium">{process.name}</TableCell>
+                  <TableCell className="text-gray-500">{process.displayOrder}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{process.name}</span>
+                      {process.isSystem && (
+                        <Badge variant="secondary" className="text-xs">
+                          {getSystemLabel(process.systemType)}
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <div
-                        className="h-6 w-6 rounded"
+                        className="h-6 w-6 rounded border"
                         style={{ backgroundColor: process.color }}
                       />
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-sm text-gray-500">
                         {process.color}
                       </span>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openEditDialog(process)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(process.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                    <div className="flex justify-center gap-1">
+                      {!process.isSystem && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openEditDialog(process)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(process)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -154,6 +215,13 @@ export function ProcessesPage() {
           </Table>
         </div>
       )}
+
+      <div className="text-sm text-gray-500 bg-gray-50 p-4 rounded-lg">
+        <p className="flex items-center gap-2">
+          <Lock className="h-4 w-4" />
+          <span><strong>작업 전</strong>과 <strong>작업 완료</strong>는 기본 공정으로 수정/삭제할 수 없습니다.</span>
+        </p>
+      </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
@@ -200,7 +268,7 @@ export function ProcessesPage() {
               <Button type="button" variant="outline" onClick={closeDialog}>
                 취소
               </Button>
-              <Button type="submit">
+              <Button type="submit" className="bg-gradient-pod24 hover:opacity-90">
                 {editingProcess ? '수정' : '추가'}
               </Button>
             </DialogFooter>
