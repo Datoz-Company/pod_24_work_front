@@ -19,4 +19,9 @@ export const kanbanService = {
     })
     return response.data.data
   },
+
+  startWork: async (workOrderId: number): Promise<WorkOrder> => {
+    const response = await api.post<ApiResponse<WorkOrder>>('/kanban/start-work', { workOrderId })
+    return response.data.data
+  },
 }

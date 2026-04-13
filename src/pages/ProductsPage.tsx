@@ -1,10 +1,13 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Edit, Trash2, Search } from 'lucide-react'
+import { Plus, Edit, Trash2, Search, Sliders, X } from 'lucide-react'
 import { productService } from '@/services/productService'
+import { optionService } from '@/services/optionService'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { Separator } from '@/components/ui/separator'
 import {
   Dialog,
   DialogContent,
@@ -21,18 +24,22 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type { Product, ProductCreateRequest } from '@/types'
+import type { Option, ProductOptionItem } from '@/types/option'
 
 export function ProductsPage() {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isOptionDialogOpen, setIsOptionDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [selectedProductForOptions, setSelectedProductForOptions] = useState<Product | null>(null)
   const [formData, setFormData] = useState<ProductCreateRequest>({
     name: '',
     category: '',
     description: '',
   })
 
+  // 상품 목록 조회
   const { data: response, isLoading } = useQuery({
     queryKey: ['products', search],
     queryFn: () => productService.getPage(0, 100, search || undefined),
@@ -40,6 +47,20 @@ export function ProductsPage() {
 
   const products = response?.content || []
 
+  // 전역 옵션 목록 조회
+  const { data: allOptions = [] } = useQuery({
+    queryKey: ['options'],
+    queryFn: optionService.getAll,
+  })
+
+  // 선택된 상품의 옵션 조회
+  const { data: productOptions = [], isLoading: isLoadingProductOptions } = useQuery({
+    queryKey: ['product-options', selectedProductForOptions?.id],
+    queryFn: () => optionService.getProductOptions(selectedProductForOptions!.id),
+    enabled: !!selectedProductForOptions,
+  })
+
+  // 상품 CRUD Mutations
   const createMutation = useMutation({
     mutationFn: productService.create,
     onSuccess: () => {
@@ -64,6 +85,16 @@ export function ProductsPage() {
     },
   })
 
+  // 상품 옵션 설정 Mutation
+  const updateProductOptionsMutation = useMutation({
+    mutationFn: ({ productId, options }: { productId: number; options: ProductOptionItem[] }) =>
+      optionService.updateProductOptions(productId, { options }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['product-options', selectedProductForOptions?.id] })
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+    },
+  })
+
   const closeDialog = () => {
     setIsDialogOpen(false)
     setEditingProduct(null)
@@ -80,6 +111,16 @@ export function ProductsPage() {
     setIsDialogOpen(true)
   }
 
+  const openOptionDialog = (product: Product) => {
+    setSelectedProductForOptions(product)
+    setIsOptionDialogOpen(true)
+  }
+
+  const closeOptionDialog = () => {
+    setIsOptionDialogOpen(false)
+    setSelectedProductForOptions(null)
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (editingProduct) {
@@ -94,6 +135,73 @@ export function ProductsPage() {
       deleteMutation.mutate(id)
     }
   }
+
+  // 옵션 추가
+  const handleAddOption = (option: Option) => {
+    if (!selectedProductForOptions) return
+
+    const currentOptions = productOptions.map((po) => ({
+      optionId: po.optionId,
+      displayOrder: po.displayOrder,
+      isRequired: po.isRequired,
+    }))
+
+    // 이미 연결된 옵션인지 확인
+    if (currentOptions.some((o) => o.optionId === option.id)) return
+
+    const newOptions: ProductOptionItem[] = [
+      ...currentOptions,
+      {
+        optionId: option.id,
+        displayOrder: currentOptions.length + 1,
+        isRequired: false,
+      },
+    ]
+
+    updateProductOptionsMutation.mutate({
+      productId: selectedProductForOptions.id,
+      options: newOptions,
+    })
+  }
+
+  // 옵션 제거
+  const handleRemoveOption = (optionId: number) => {
+    if (!selectedProductForOptions) return
+
+    const newOptions = productOptions
+      .filter((po) => po.optionId !== optionId)
+      .map((po, idx) => ({
+        optionId: po.optionId,
+        displayOrder: idx + 1,
+        isRequired: po.isRequired,
+      }))
+
+    updateProductOptionsMutation.mutate({
+      productId: selectedProductForOptions.id,
+      options: newOptions,
+    })
+  }
+
+  // 필수 여부 토글
+  const handleToggleRequired = (optionId: number) => {
+    if (!selectedProductForOptions) return
+
+    const newOptions = productOptions.map((po) => ({
+      optionId: po.optionId,
+      displayOrder: po.displayOrder,
+      isRequired: po.optionId === optionId ? !po.isRequired : po.isRequired,
+    }))
+
+    updateProductOptionsMutation.mutate({
+      productId: selectedProductForOptions.id,
+      options: newOptions,
+    })
+  }
+
+  // 연결되지 않은 옵션 필터링
+  const availableOptions = allOptions.filter(
+    (option) => !productOptions.some((po) => po.optionId === option.id)
+  )
 
   return (
     <div className="p-6">
@@ -127,7 +235,7 @@ export function ProductsPage() {
                 <TableHead>상품명</TableHead>
                 <TableHead>카테고리</TableHead>
                 <TableHead>설명</TableHead>
-                <TableHead className="w-24">작업</TableHead>
+                <TableHead className="w-32">작업</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -143,7 +251,16 @@ export function ProductsPage() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        onClick={() => openOptionDialog(product)}
+                        title="옵션 설정"
+                      >
+                        <Sliders className="h-4 w-4 text-blue-600" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={() => openEditDialog(product)}
+                        title="수정"
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
@@ -151,6 +268,7 @@ export function ProductsPage() {
                         variant="ghost"
                         size="icon"
                         onClick={() => handleDelete(product.id)}
+                        title="삭제"
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
@@ -170,6 +288,7 @@ export function ProductsPage() {
         </div>
       )}
 
+      {/* 상품 추가/수정 다이얼로그 */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -218,6 +337,118 @@ export function ProductsPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* 옵션 설정 다이얼로그 */}
+      <Dialog open={isOptionDialogOpen} onOpenChange={setIsOptionDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              옵션 설정 - {selectedProductForOptions?.name}
+            </DialogTitle>
+          </DialogHeader>
+
+          {isLoadingProductOptions ? (
+            <div className="py-8 text-center text-muted-foreground">로딩 중...</div>
+          ) : (
+            <div className="space-y-4">
+              {/* 연결된 옵션 목록 */}
+              <div>
+                <Label className="text-sm font-medium">연결된 옵션</Label>
+                {productOptions.length === 0 ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    연결된 옵션이 없습니다. 아래에서 옵션을 추가하세요.
+                  </p>
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    {productOptions.map((po) => (
+                      <div
+                        key={po.id}
+                        className="flex items-center justify-between rounded-lg border p-3"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{po.option?.name}</span>
+                          {po.isRequired && (
+                            <Badge variant="destructive" className="text-xs">
+                              필수
+                            </Badge>
+                          )}
+                          <Badge variant="secondary" className="text-xs">
+                            {po.option?.optionType}
+                          </Badge>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleToggleRequired(po.optionId)}
+                            disabled={updateProductOptionsMutation.isPending}
+                          >
+                            {po.isRequired ? '선택으로 변경' : '필수로 변경'}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRemoveOption(po.optionId)}
+                            disabled={updateProductOptionsMutation.isPending}
+                          >
+                            <X className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <Separator />
+
+              {/* 추가 가능한 옵션 목록 */}
+              <div>
+                <Label className="text-sm font-medium">추가 가능한 옵션</Label>
+                {availableOptions.length === 0 ? (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    추가 가능한 옵션이 없습니다. 옵션 관리에서 새 옵션을 생성하세요.
+                  </p>
+                ) : (
+                  <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
+                    {availableOptions.map((option) => (
+                      <div
+                        key={option.id}
+                        className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span>{option.name}</span>
+                          <Badge variant="outline" className="text-xs">
+                            {option.optionType}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            ({option.attributes.length}개 속성)
+                          </span>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleAddOption(option)}
+                          disabled={updateProductOptionsMutation.isPending}
+                        >
+                          <Plus className="h-4 w-4 mr-1" />
+                          추가
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button onClick={closeOptionDialog}>
+              완료
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

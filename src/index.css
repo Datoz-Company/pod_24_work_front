@@ -5,47 +5,56 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 220 13% 18%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 220 13% 18%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
-    --radius: 0.5rem;
+    --popover-foreground: 220 13% 18%;
+    /* POD24 브랜드 컬러 - Blue #0073FF */
+    --primary: 212 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    /* Cyan/Teal accent */
+    --secondary: 187 100% 42%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    /* Accent - Light Cyan */
+    --accent: 187 85% 53%;
+    --accent-foreground: 220 13% 18%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 212 100% 50%;
+    --radius: 0.375rem;
+
+    /* POD24 Brand Colors */
+    --pod24-blue: #0073FF;
+    --pod24-cyan: #00C3FF;
+    --pod24-teal: #11E2D5;
+    --pod24-accent: #00CBFF;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    --background: 220 13% 10%;
     --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
+    --card: 220 13% 12%;
     --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
+    --popover: 220 13% 12%;
     --popover-foreground: 210 40% 98%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
+    --primary: 212 100% 55%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 187 100% 45%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 187 85% 45%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 63% 31%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --border: 217 33% 20%;
+    --input: 217 33% 20%;
+    --ring: 212 100% 55%;
   }
 }
 
@@ -54,7 +63,33 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
-    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  }
+}
+
+@layer components {
+  /* POD24 Button Styles */
+  .btn-pod24 {
+    @apply bg-gradient-to-r from-[#0073FF] to-[#00C3FF] text-white font-medium;
+  }
+
+  .btn-pod24:hover {
+    @apply from-[#0066E6] to-[#00B0E6];
+  }
+}
+
+@layer utilities {
+  /* POD24 Gradient Text */
+  .text-gradient-pod24 {
+    background: linear-gradient(135deg, #0073FF 0%, #00C3FF 50%, #11E2D5 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* POD24 Gradient Background */
+  .bg-gradient-pod24 {
+    background: linear-gradient(135deg, #0073FF 0%, #00C3FF 100%);
   }
 }

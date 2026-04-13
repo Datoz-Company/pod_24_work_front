@@ -1,6 +1,6 @@
 export type WorkOrderStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED'
 export type ProcessStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED'
-export type UserRole = 'ADMIN' | 'MANAGER' | 'WORKER'
+export type UserRole = 'ADMIN' | 'COMPANY_ADMIN' | 'COMPANY_MANAGER'
 
 export interface User {
   id: number
@@ -8,6 +8,8 @@ export interface User {
   name: string
   email?: string
   role: UserRole
+  companyId?: number
+  companyName?: string
 }
 
 export interface Process {
@@ -16,6 +18,8 @@ export interface Process {
   displayOrder: number
   color: string
   isActive: boolean
+  isSystem?: boolean
+  systemType?: 'PENDING' | 'COMPLETED'
 }
 
 export interface Customer {
@@ -56,15 +60,25 @@ export interface WorkOrder {
   product: Product
   customer?: Customer
   processes: WorkOrderProcess[]
+  options?: WorkOrderOption[]
   dueDate?: string
   createdAt: string
   completedAt?: string
   memo?: string
 }
 
+// 완료된 공정 상세 정보 (드래그 가능한 미니 카드용)
+export interface CompletedProcessInfo {
+  workOrderProcessId: number
+  processId: number
+  processName: string
+  processColor: string
+  displayOrder: number
+}
+
 export interface KanbanCard {
   workOrderId: number
-  workOrderProcessId: number
+  workOrderProcessId?: number
   orderNumber: string
   orderName: string
   productName?: string
@@ -73,8 +87,14 @@ export interface KanbanCard {
   processStatus: ProcessStatus
   workOrderStatus: WorkOrderStatus
   dueDate?: string
-  currentProcessOrder: number
+  currentProcessOrder?: number
   totalProcesses: number
+  // 현재 공정명 (중간 공정 카드용)
+  processName?: string
+  // 완료된 공정 목록 - 문자열 (레거시)
+  completedProcesses?: string[]
+  // 완료된 공정 상세 정보 (드래그 가능한 미니 카드용)
+  completedProcessInfos?: CompletedProcessInfo[]
 }
 
 export interface KanbanColumn {
@@ -109,7 +129,11 @@ export interface LoginResponse {
   username: string
   name: string
   role: UserRole
+  companyId?: number
+  companyName?: string
 }
+
+import type { WorkOrderOptionRequest, WorkOrderOption } from './option'
 
 export interface WorkOrderCreateRequest {
   orderName: string
@@ -118,6 +142,7 @@ export interface WorkOrderCreateRequest {
   quantity: number
   dueDate?: string
   memo?: string
+  options?: WorkOrderOptionRequest[]
 }
 
 export interface ProcessCreateRequest {
@@ -144,4 +169,15 @@ export interface KanbanMoveRequest {
   workOrderId: number
   targetProcessId: number
   newStatus?: ProcessStatus
+}
+
+export interface Attachment {
+  id: number
+  workOrderId: number
+  originalFilename: string
+  contentType: string
+  fileSize: number
+  downloadUrl: string
+  thumbnailUrl?: string
+  createdAt: string
 }

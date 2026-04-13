@@ -48,6 +48,13 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // POD24 Brand Colors
+        pod24: {
+          blue: "#0073FF",
+          cyan: "#00C3FF",
+          teal: "#11E2D5",
+          accent: "#00CBFF",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

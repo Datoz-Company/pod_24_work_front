@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import type { Product, Process } from '@/types'
+import { toast } from 'sonner'
+import type { Product } from '@/types'
 
 export function ProductProcessesPage() {
   const queryClient = useQueryClient()
@@ -29,20 +30,50 @@ export function ProductProcessesPage() {
       productService.updateProcesses(productId, processIds),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] })
+      toast.success('공정 설정이 저장되었습니다')
+    },
+    onError: () => {
+      toast.error('공정 설정 저장에 실패했습니다')
     },
   })
 
+  // 시스템 공정 ID 목록 (작업 전, 작업 완료)
+  const systemProcessIds = allProcesses
+    .filter((p) => p.isSystem)
+    .map((p) => p.id)
+
   const handleSelectProduct = (product: Product) => {
     setSelectedProduct(product)
-    setSelectedProcessIds(product.processes?.map((p) => p.id) || [])
+    // 기존 공정 + 시스템 공정 필수 포함
+    const productProcessIds = product.processes?.map((p) => p.id) || []
+    const mergedIds = [...new Set([...systemProcessIds, ...productProcessIds])]
+    // 시스템 공정 순서대로 정렬 (작업 전이 첫 번째, 작업 완료가 마지막)
+    const sortedIds = mergedIds.sort((a, b) => {
+      const processA = allProcesses.find((p) => p.id === a)
+      const processB = allProcesses.find((p) => p.id === b)
+      return (processA?.displayOrder || 0) - (processB?.displayOrder || 0)
+    })
+    setSelectedProcessIds(sortedIds)
   }
 
   const toggleProcess = (processId: number) => {
+    // 시스템 공정은 해제 불가
+    const process = allProcesses.find((p) => p.id === processId)
+    if (process?.isSystem) return
+
     setSelectedProcessIds((prev) => {
+      let newIds: number[]
       if (prev.includes(processId)) {
-        return prev.filter((id) => id !== processId)
+        newIds = prev.filter((id) => id !== processId)
+      } else {
+        newIds = [...prev, processId]
       }
-      return [...prev, processId]
+      // 시스템 공정 순서 유지하며 정렬
+      return newIds.sort((a, b) => {
+        const processA = allProcesses.find((p) => p.id === a)
+        const processB = allProcesses.find((p) => p.id === b)
+        return (processA?.displayOrder || 0) - (processB?.displayOrder || 0)
+      })
     })
   }
 
@@ -56,7 +87,9 @@ export function ProductProcessesPage() {
 
   const hasChanges = () => {
     if (!selectedProduct) return false
-    const originalIds = selectedProduct.processes?.map((p) => p.id) || []
+    // products 배열에서 최신 데이터 참조 (저장 후 갱신된 데이터 반영)
+    const currentProduct = products.find((p) => p.id === selectedProduct.id)
+    const originalIds = currentProduct?.processes?.map((p) => p.id) || []
     if (originalIds.length !== selectedProcessIds.length) return true
     return !originalIds.every((id) => selectedProcessIds.includes(id))
   }
@@ -114,16 +147,19 @@ export function ProductProcessesPage() {
                   {allProcesses.map((process) => {
                     const isSelected = selectedProcessIds.includes(process.id)
                     const order = selectedProcessIds.indexOf(process.id) + 1
+                    const isSystem = process.isSystem
 
                     return (
                       <button
                         key={process.id}
                         onClick={() => toggleProcess(process.id)}
+                        disabled={isSystem}
                         className={cn(
                           'relative rounded-lg border-2 p-4 text-left transition-all',
                           isSelected
                             ? 'border-primary bg-primary/5'
-                            : 'border-muted hover:border-primary/50'
+                            : 'border-muted hover:border-primary/50',
+                          isSystem && 'cursor-not-allowed opacity-80'
                         )}
                       >
                         {isSelected && (
@@ -135,7 +171,14 @@ export function ProductProcessesPage() {
                           className="mb-2 h-3 w-8 rounded"
                           style={{ backgroundColor: process.color }}
                         />
-                        <div className="font-medium">{process.name}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{process.name}</span>
+                          {isSystem && (
+                            <Badge variant="secondary" className="text-xs">
+                              필수
+                            </Badge>
+                          )}
+                        </div>
                         <div className="mt-1">
                           {isSelected ? (
                             <Check className="h-4 w-4 text-primary" />

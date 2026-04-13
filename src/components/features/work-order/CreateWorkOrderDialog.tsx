@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
+import { X, Paperclip } from 'lucide-react'
 import { productService } from '@/services/productService'
 import { customerService } from '@/services/customerService'
 import { workOrderService } from '@/services/workOrderService'
+import { optionService } from '@/services/optionService'
+import { attachmentService } from '@/services/attachmentService'
 import {
   Dialog,
   DialogContent,
@@ -14,6 +17,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Separator } from '@/components/ui/separator'
+import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -21,11 +26,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { OptionSelector } from '@/components/features/option/OptionSelector'
+import { FileUploader } from '@/components/features/attachment/FileUploader'
 import type { WorkOrderCreateRequest } from '@/types'
+import type { WorkOrderOptionRequest } from '@/types/option'
 
 interface CreateWorkOrderDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+}
+
+interface FormData extends Omit<WorkOrderCreateRequest, 'options'> {
+  options: WorkOrderOptionRequest[]
 }
 
 export function CreateWorkOrderDialog({
@@ -33,15 +45,19 @@ export function CreateWorkOrderDialog({
   onOpenChange,
 }: CreateWorkOrderDialogProps) {
   const queryClient = useQueryClient()
-  const [formData, setFormData] = useState<WorkOrderCreateRequest>({
+  const [formData, setFormData] = useState<FormData>({
     orderName: '',
     productId: 0,
     customerId: undefined,
     quantity: 1,
     dueDate: undefined,
     memo: '',
+    options: [],
   })
   const [showNoProcessWarning, setShowNoProcessWarning] = useState(false)
+  const [requiredOptionError, setRequiredOptionError] = useState<string | null>(null)
+  const [pendingFiles, setPendingFiles] = useState<File[]>([])
+  const [isUploading, setIsUploading] = useState(false)
 
   const { data: products = [] } = useQuery({
     queryKey: ['products', 'with-processes'],
@@ -53,19 +69,24 @@ export function CreateWorkOrderDialog({
     queryFn: customerService.getAll,
   })
 
+  // 선택된 상품의 옵션 조회
+  const { data: productOptions = [], isLoading: isLoadingOptions } = useQuery({
+    queryKey: ['product-options', formData.productId],
+    queryFn: () => optionService.getProductOptions(formData.productId),
+    enabled: formData.productId > 0,
+  })
+
+  // 상품 변경 시 옵션 선택 초기화
+  useEffect(() => {
+    setFormData((prev) => ({
+      ...prev,
+      options: [],
+    }))
+    setRequiredOptionError(null)
+  }, [formData.productId])
+
   const createMutation = useMutation({
-    mutationFn: workOrderService.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kanban'] })
-      queryClient.invalidateQueries({ queryKey: ['work-orders'] })
-      onOpenChange(false)
-      resetForm()
-    },
-    onError: (error: Error) => {
-      if (error.message.includes('공정')) {
-        setShowNoProcessWarning(true)
-      }
-    },
+    mutationFn: (data: WorkOrderCreateRequest) => workOrderService.create(data),
   })
 
   const resetForm = () => {
@@ -76,11 +97,49 @@ export function CreateWorkOrderDialog({
       quantity: 1,
       dueDate: undefined,
       memo: '',
+      options: [],
     })
     setShowNoProcessWarning(false)
+    setRequiredOptionError(null)
+    setPendingFiles([])
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleFileSelect = useCallback(async (file: File) => {
+    setPendingFiles((prev) => [...prev, file])
+  }, [])
+
+  const handleRemoveFile = useCallback((index: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index))
+  }, [])
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  // 필수 옵션 검증
+  const validateRequiredOptions = (): boolean => {
+    const requiredOptions = productOptions.filter((po) => po.isRequired)
+
+    for (const requiredOpt of requiredOptions) {
+      const selectedOption = formData.options.find(
+        (opt) => opt.optionId === requiredOpt.optionId
+      )
+
+      if (!selectedOption || selectedOption.selectedAttributeValueIds.length === 0) {
+        setRequiredOptionError(
+          `필수 옵션 "${requiredOpt.option?.name}"을(를) 선택해주세요.`
+        )
+        return false
+      }
+    }
+
+    setRequiredOptionError(null)
+    return true
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     const selectedProduct = products.find((p) => p.id === formData.productId)
@@ -89,12 +148,55 @@ export function CreateWorkOrderDialog({
       return
     }
 
-    createMutation.mutate(formData)
+    // 필수 옵션 검증
+    if (!validateRequiredOptions()) {
+      return
+    }
+
+    // options를 WorkOrderCreateRequest 형태로 변환
+    const requestData: WorkOrderCreateRequest = {
+      orderName: formData.orderName,
+      productId: formData.productId,
+      customerId: formData.customerId,
+      quantity: formData.quantity,
+      dueDate: formData.dueDate,
+      memo: formData.memo,
+      options: formData.options.length > 0 ? formData.options : undefined,
+    }
+
+    try {
+      // 1. 작업지시서 생성
+      const workOrder = await createMutation.mutateAsync(requestData)
+
+      // 2. 파일 업로드 (있는 경우)
+      if (pendingFiles.length > 0) {
+        setIsUploading(true)
+        try {
+          await Promise.all(
+            pendingFiles.map((file) => attachmentService.upload(workOrder.id, file))
+          )
+        } catch (uploadError) {
+          console.error('파일 업로드 실패:', uploadError)
+          // 작업지시서는 생성되었으므로 계속 진행
+        } finally {
+          setIsUploading(false)
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['kanban'] })
+      queryClient.invalidateQueries({ queryKey: ['work-orders'] })
+      onOpenChange(false)
+      resetForm()
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('공정')) {
+        setShowNoProcessWarning(true)
+      }
+    }
   }
 
   const handleProductChange = (value: string) => {
     const productId = Number(value)
-    setFormData({ ...formData, productId })
+    setFormData({ ...formData, productId, options: [] })
 
     const selectedProduct = products.find((p) => p.id === productId)
     if (selectedProduct && (!selectedProduct.processes || selectedProduct.processes.length === 0)) {
@@ -104,9 +206,14 @@ export function CreateWorkOrderDialog({
     }
   }
 
+  const handleOptionsChange = (options: WorkOrderOptionRequest[]) => {
+    setFormData({ ...formData, options })
+    setRequiredOptionError(null)
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>새 작업 생성</DialogTitle>
         </DialogHeader>
@@ -205,6 +312,66 @@ export function CreateWorkOrderDialog({
             />
           </div>
 
+          {/* 옵션 선택 영역 */}
+          {formData.productId > 0 && productOptions.length > 0 && (
+            <>
+              <Separator />
+              {isLoadingOptions ? (
+                <div className="text-sm text-muted-foreground">옵션 로딩 중...</div>
+              ) : (
+                <OptionSelector
+                  productOptions={productOptions}
+                  selectedOptions={formData.options}
+                  onOptionsChange={handleOptionsChange}
+                />
+              )}
+              {requiredOptionError && (
+                <p className="text-sm text-destructive">{requiredOptionError}</p>
+              )}
+            </>
+          )}
+
+          {/* 파일 첨부 영역 */}
+          <Separator />
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Paperclip className="h-4 w-4 text-muted-foreground" />
+              <Label>첨부파일</Label>
+              {pendingFiles.length > 0 && (
+                <Badge variant="secondary" className="h-5 px-1.5 text-xs">
+                  {pendingFiles.length}
+                </Badge>
+              )}
+            </div>
+            <FileUploader onUpload={handleFileSelect} />
+            {pendingFiles.length > 0 && (
+              <div className="space-y-2">
+                {pendingFiles.map((file, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between rounded-md border px-3 py-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{file.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatFileSize(file.size)}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => handleRemoveFile(index)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <DialogFooter>
             <Button
               type="button"
@@ -213,6 +380,7 @@ export function CreateWorkOrderDialog({
                 onOpenChange(false)
                 resetForm()
               }}
+              disabled={createMutation.isPending || isUploading}
             >
               취소
             </Button>
@@ -220,12 +388,17 @@ export function CreateWorkOrderDialog({
               type="submit"
               disabled={
                 createMutation.isPending ||
+                isUploading ||
                 !formData.productId ||
                 !formData.orderName ||
                 showNoProcessWarning
               }
             >
-              {createMutation.isPending ? '생성 중...' : '생성'}
+              {createMutation.isPending
+                ? '생성 중...'
+                : isUploading
+                ? '파일 업로드 중...'
+                : '생성'}
             </Button>
           </DialogFooter>
         </form>
