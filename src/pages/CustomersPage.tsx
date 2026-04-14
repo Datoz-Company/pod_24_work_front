@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { CustomerDetailSheet } from '@/components/features/customer/CustomerDetailSheet'
 import type { Customer, CustomerCreateRequest } from '@/types'
 
 export function CustomersPage() {
@@ -27,6 +28,7 @@ export function CustomersPage() {
   const [search, setSearch] = useState('')
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [formData, setFormData] = useState<CustomerCreateRequest>({
     name: '',
     phone: '',
@@ -137,7 +139,11 @@ export function CustomersPage() {
             </TableHeader>
             <TableBody>
               {customers.map((customer) => (
-                <TableRow key={customer.id}>
+                <TableRow
+                  key={customer.id}
+                  className="cursor-pointer hover:bg-muted/50"
+                  onClick={() => setSelectedCustomer(customer)}
+                >
                   <TableCell className="font-medium">{customer.name}</TableCell>
                   <TableCell>{customer.phone || '-'}</TableCell>
                   <TableCell>{customer.email || '-'}</TableCell>
@@ -149,14 +155,20 @@ export function CustomersPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => openEditDialog(customer)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openEditDialog(customer)
+                        }}
                       >
                         <Edit className="h-4 w-4" />
                       </Button>
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => handleDelete(customer.id)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDelete(customer.id)
+                        }}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
@@ -247,6 +259,13 @@ export function CustomersPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* 고객 상세 Sheet */}
+      <CustomerDetailSheet
+        customer={selectedCustomer}
+        open={!!selectedCustomer}
+        onOpenChange={(open) => !open && setSelectedCustomer(null)}
+      />
     </div>
   )
 }
