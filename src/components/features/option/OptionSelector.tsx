@@ -86,7 +86,7 @@ export function OptionSelector({
 
   // 부모 값이 선택되었는지 확인
   const isParentValueSelected = useCallback(
-    (attribute: OptionAttribute, parentAttribute: OptionAttribute | undefined, selectedValueIds: number[]): boolean => {
+    (_attribute: OptionAttribute, parentAttribute: OptionAttribute | undefined, selectedValueIds: number[]): boolean => {
       if (!parentAttribute) return true
       return parentAttribute.values.some((v) => selectedValueIds.includes(v.id))
     },
