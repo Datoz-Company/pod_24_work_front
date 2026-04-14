@@ -775,13 +775,41 @@ export function OptionsPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>삭제 확인</AlertDialogTitle>
-            <AlertDialogDescription>
-              "{deleteTarget?.name}"을(를) 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">
+                "{deleteTarget?.name}"을(를) 삭제하시겠습니까?
+              </span>
+              {deleteTarget?.type === 'option' && (
+                <span className="block text-destructive text-sm">
+                  ⚠️ 이 옵션에 포함된 모든 속성과 속성값이 함께 삭제됩니다.
+                  <br />
+                  이 옵션을 사용 중인 상품에서 연결이 해제됩니다.
+                  <br />
+                  속성값 간 연결(계층 관계)도 함께 삭제됩니다.
+                </span>
+              )}
+              {deleteTarget?.type === 'attribute' && (
+                <span className="block text-destructive text-sm">
+                  ⚠️ 이 속성에 포함된 모든 속성값이 함께 삭제됩니다.
+                  <br />
+                  속성값 간 연결(계층 관계)도 함께 삭제됩니다.
+                </span>
+              )}
+              {deleteTarget?.type === 'value' && (
+                <span className="block text-destructive text-sm">
+                  ⚠️ 이 값과 연결된 자식/부모 값 관계가 해제됩니다.
+                </span>
+              )}
+              <span className="block text-muted-foreground text-xs mt-2">
+                이 작업은 취소할 수 없습니다.
+              </span>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>취소</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete}>삭제</AlertDialogAction>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
+              삭제
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
