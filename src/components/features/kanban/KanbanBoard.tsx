@@ -32,6 +32,7 @@ export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
   const [activeCard, setActiveCard] = useState<KanbanCardType | null>(null)
   const [isDraggingMiniCard, setIsDraggingMiniCard] = useState(false)
   const [isDraggingFromPending, setIsDraggingFromPending] = useState(false)
+  const [isDraggingFromMiddle, setIsDraggingFromMiddle] = useState(false)
   const [isOverProcessGroup, setIsOverProcessGroup] = useState(false)
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<number | null>(null)
   const [selectedProcessId, setSelectedProcessId] = useState<number | null>(null)
@@ -131,6 +132,12 @@ export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
       // 드래그 중인 카드의 workOrderStatus가 PENDING인지 직접 확인
       const isFromPending = card.workOrderStatus === 'PENDING'
       setIsDraggingFromPending(isFromPending)
+
+      // 중간 공정 카드인지 확인 (workOrderProcessId가 있고, IN_PROGRESS 상태)
+      const isFromMiddle = !isMiniCard &&
+        card.workOrderProcessId != null &&
+        card.workOrderStatus === 'IN_PROGRESS'
+      setIsDraggingFromMiddle(isFromMiddle)
     }
   }
 
@@ -158,6 +165,7 @@ export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
     setActiveCard(null)
     setIsDraggingMiniCard(false)
     setIsDraggingFromPending(false)
+    setIsDraggingFromMiddle(false)
     setIsOverProcessGroup(false)
 
     if (!over) return
@@ -220,9 +228,19 @@ export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
       return
     }
 
+    // 중간 공정 카드인지 확인
+    const isMiddleProcessCard = activeCard.workOrderProcessId != null
+    const isDraggingFromMiddle = currentColumn && !currentColumn.process.isSystem
+
+    // 중간 공정 카드가 다른 중간 공정으로 이동하는 것을 차단
+    // 중간 공정 카드는 오직 "작업 완료" 컬럼으로만 이동 가능
+    if (isDraggingFromMiddle && isMiddleProcessCard && !overColumn.process.isSystem) {
+      // 다른 중간 공정 컬럼으로 드롭한 경우 - 이동 불가
+      return
+    }
+
     // 작업 완료 컬럼으로 드래그한 경우: 공정 완료 처리
     const isCompletedColumn = overColumn.process.isSystem && overColumn.process.systemType === 'COMPLETED'
-    const isMiddleProcessCard = activeCard.workOrderProcessId != null
 
     if (isCompletedColumn && isMiddleProcessCard) {
       updateProcessStatusMutation.mutate({
@@ -232,6 +250,7 @@ export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
       return
     }
 
+    // 그 외의 경우 (예: 작업 전 → 작업 전 등)
     moveMutation.mutate({
       workOrderId: activeCard.workOrderId,
       targetProcessId: overColumn.process.id,
@@ -249,7 +268,10 @@ export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
   // 하이라이트 상태: 작업 전에서 드래그 중이거나, 미니 카드(완료된 공정) 드래그 중일 때
   const shouldHighlightProcessGroup = (isDraggingFromPending || isDraggingMiniCard) && isOverProcessGroup
   // 중간 공정 컬럼 하이라이트: 작업 전에서 드래그 중이거나, 미니 카드 드래그 중일 때
+  // (중간 공정 카드 드래그 중에는 하이라이트 안 함)
   const shouldHighlightMiddleColumns = isDraggingFromPending || isDraggingMiniCard
+  // 작업 완료 컬럼 하이라이트: 중간 공정 카드 드래그 중일 때
+  const shouldHighlightCompletedColumn = isDraggingFromMiddle
 
   const handleCardClick = (card: KanbanCardType) => {
     setSelectedWorkOrderId(card.workOrderId)
@@ -309,6 +331,7 @@ export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
             key={column.process.id}
             column={column}
             onCardClick={handleCardClick}
+            isHighlighted={shouldHighlightCompletedColumn}
           />
         ))}
       </div>
