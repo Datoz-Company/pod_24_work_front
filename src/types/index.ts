@@ -1,5 +1,6 @@
 export type WorkOrderStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED'
 export type ProcessStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED'
+export type OrderStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
 export type UserRole = 'ADMIN' | 'COMPANY_ADMIN' | 'COMPANY_MANAGER'
 
 export interface User {
@@ -42,6 +43,61 @@ export interface Product {
   createdAt: string
 }
 
+export interface OrderSummary {
+  id: number
+  orderNumber: string
+  orderName: string
+  customerName?: string
+  status: OrderStatus
+  workOrderCount: number
+  completedCount: number
+}
+
+export interface WorkOrderSummary {
+  id: number
+  orderNumber: string
+  orderName: string
+  productName?: string
+  customerName?: string
+  quantity: number
+  status: WorkOrderStatus
+  dueDate?: string
+  createdAt: string
+  completedAt?: string
+}
+
+export interface Order {
+  id: number
+  orderNumber: string
+  orderName: string
+  customer?: Customer
+  status: OrderStatus
+  workOrders: WorkOrderSummary[]
+  workOrderCount: number
+  completedCount: number
+  orderDate?: string
+  dueDate?: string
+  completedAt?: string
+  memo?: string
+  createdAt: string
+}
+
+export interface OrderCreateRequest {
+  orderName: string
+  customerId?: number
+  orderDate?: string
+  dueDate?: string
+  memo?: string
+}
+
+export interface OrderUpdateRequest {
+  orderName?: string
+  customerId?: number
+  orderDate?: string
+  dueDate?: string
+  memo?: string
+}
+
 export interface WorkOrderProcess {
   id: number
   process: Process
@@ -59,6 +115,7 @@ export interface WorkOrder {
   status: WorkOrderStatus
   product: Product
   customer?: Customer
+  order?: OrderSummary
   processes: WorkOrderProcess[]
   options?: WorkOrderOption[]
   dueDate?: string
@@ -139,6 +196,7 @@ export interface WorkOrderCreateRequest {
   orderName: string
   productId: number
   customerId?: number
+  orderId?: number
   quantity: number
   dueDate?: string
   memo?: string

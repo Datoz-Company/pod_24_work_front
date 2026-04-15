@@ -111,8 +111,27 @@ export const optionService = {
   },
 
   /** 자식 속성 연결 (예: "종이 평량"을 "종이 종류"의 자식으로) */
-  async setChildAttribute(parentAttributeId: number, childAttributeId: number): Promise<OptionAttribute> {
-    const response = await api.post(`/options/attributes/${parentAttributeId}/child/${childAttributeId}`)
+  async setChildAttribute(
+    parentAttributeId: number,
+    childAttributeId: number,
+    visibleForParentValueIds?: number[]
+  ): Promise<OptionAttribute> {
+    const response = await api.post(
+      `/options/attributes/${parentAttributeId}/child/${childAttributeId}`,
+      visibleForParentValueIds ? { visibleForParentValueIds } : {}
+    )
+    return response.data.data
+  },
+
+  /** 하위 속성의 표시 조건 업데이트 */
+  async updateChildAttributeVisibility(
+    childAttributeId: number,
+    visibleForParentValueIds: number[]
+  ): Promise<OptionAttribute> {
+    const response = await api.put(
+      `/options/attributes/${childAttributeId}/visibility`,
+      { visibleForParentValueIds }
+    )
     return response.data.data
   },
 

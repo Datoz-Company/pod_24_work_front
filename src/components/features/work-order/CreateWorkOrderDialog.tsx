@@ -3,10 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { X, Paperclip } from 'lucide-react'
 import { productService } from '@/services/productService'
-import { customerService } from '@/services/customerService'
 import { workOrderService } from '@/services/workOrderService'
 import { optionService } from '@/services/optionService'
 import { attachmentService } from '@/services/attachmentService'
+import { orderService } from '@/services/orderService'
 import {
   Dialog,
   DialogContent,
@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/select'
 import { OptionSelector } from '@/components/features/option/OptionSelector'
 import { FileUploader } from '@/components/features/attachment/FileUploader'
+import { CustomerCombobox } from '@/components/features/customer/CustomerCombobox'
 import type { WorkOrderCreateRequest } from '@/types'
 import type { WorkOrderOptionRequest } from '@/types/option'
 
@@ -49,6 +50,7 @@ export function CreateWorkOrderDialog({
     orderName: '',
     productId: 0,
     customerId: undefined,
+    orderId: undefined,
     quantity: 1,
     dueDate: undefined,
     memo: '',
@@ -64,9 +66,9 @@ export function CreateWorkOrderDialog({
     queryFn: productService.getAllWithProcesses,
   })
 
-  const { data: customers = [] } = useQuery({
-    queryKey: ['customers', 'all'],
-    queryFn: customerService.getAll,
+  const { data: activeOrders = [] } = useQuery({
+    queryKey: ['orders', 'active'],
+    queryFn: orderService.getActive,
   })
 
   // 선택된 상품의 옵션 조회
@@ -94,6 +96,7 @@ export function CreateWorkOrderDialog({
       orderName: '',
       productId: 0,
       customerId: undefined,
+      orderId: undefined,
       quantity: 1,
       dueDate: undefined,
       memo: '',
@@ -158,6 +161,7 @@ export function CreateWorkOrderDialog({
       orderName: formData.orderName,
       productId: formData.productId,
       customerId: formData.customerId,
+      orderId: formData.orderId,
       quantity: formData.quantity,
       dueDate: formData.dueDate,
       memo: formData.memo,
@@ -185,6 +189,7 @@ export function CreateWorkOrderDialog({
 
       queryClient.invalidateQueries({ queryKey: ['kanban'] })
       queryClient.invalidateQueries({ queryKey: ['work-orders'] })
+      queryClient.invalidateQueries({ queryKey: ['orders'] })
       onOpenChange(false)
       resetForm()
     } catch (error) {
@@ -274,27 +279,46 @@ export function CreateWorkOrderDialog({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="customerId">고객</Label>
+            <Label htmlFor="orderId">주문</Label>
             <Select
-              value={formData.customerId ? String(formData.customerId) : ''}
-              onValueChange={(value) =>
+              value={formData.orderId ? String(formData.orderId) : ''}
+              onValueChange={(value) => {
+                const orderId = value ? Number(value) : undefined
+                const selectedOrder = activeOrders.find((o) => o.id === orderId)
                 setFormData({
                   ...formData,
-                  customerId: value ? Number(value) : undefined,
+                  orderId,
+                  customerId: selectedOrder?.customer?.id || formData.customerId,
                 })
-              }
+              }}
             >
               <SelectTrigger>
-                <SelectValue placeholder="고객을 선택하세요 (선택사항)" />
+                <SelectValue placeholder="주문을 선택하세요 (선택사항)" />
               </SelectTrigger>
               <SelectContent>
-                {customers.map((customer) => (
-                  <SelectItem key={customer.id} value={String(customer.id)}>
-                    {customer.name}
+                {activeOrders.map((order) => (
+                  <SelectItem key={order.id} value={String(order.id)}>
+                    {order.orderName}
+                    {order.customer && (
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        ({order.customer.name})
+                      </span>
+                    )}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="customerId">고객</Label>
+            <CustomerCombobox
+              value={formData.customerId}
+              onChange={(customerId) =>
+                setFormData({ ...formData, customerId })
+              }
+              placeholder="고객을 검색하세요 (선택사항)"
+            />
           </div>
 
           <div className="space-y-2">
