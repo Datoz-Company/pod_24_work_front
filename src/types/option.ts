@@ -37,6 +37,7 @@ export interface OptionAttribute {
   parentAttributeName?: string     // 부모 속성 이름
   hasChildAttribute?: boolean      // 자식 속성이 있는지 여부
   isChildAttribute?: boolean       // 자신이 자식 속성인지 여부
+  visibleForParentValueIds?: number[]  // 이 하위 속성이 표시될 상위 값 ID 목록
 }
 
 // 옵션 (전역)

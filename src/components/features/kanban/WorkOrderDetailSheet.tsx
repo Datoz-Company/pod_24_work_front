@@ -304,7 +304,7 @@ export function WorkOrderDetailSheet({
                   {workOrder.options && workOrder.options.length > 0 && (
                     <section className="space-y-3">
                       <h3 className="text-sm font-semibold text-muted-foreground">옵션</h3>
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         {workOrder.options.map((option, index) => {
                           const snapshot = (() => {
                             try {
@@ -318,12 +318,42 @@ export function WorkOrderDetailSheet({
                           return (
                             <div
                               key={option.id ?? index}
-                              className="flex items-center justify-between rounded-lg border p-3"
+                              className="rounded-lg border p-3 space-y-2"
                             >
-                              <span className="text-sm font-medium">{optionName}</span>
-                              <span className="text-sm text-muted-foreground">
-                                {option.optionCount}개 · ₩{option.optionTotalAmount.toLocaleString()}
-                              </span>
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium">{optionName}</span>
+                                <span className="text-sm text-muted-foreground">
+                                  {option.optionCount}개 · ₩{option.optionTotalAmount.toLocaleString()}
+                                </span>
+                              </div>
+                              {/* 선택된 속성값 표시 */}
+                              {snapshot?.attributes && snapshot.attributes.length > 0 && (
+                                <div className="space-y-1.5 pt-1 border-t">
+                                  {snapshot.attributes.map((attr: { attributeId: number; attributeName: string; selectedValues: { valueId: number; value: string; price: number }[] }) => (
+                                    <div key={attr.attributeId} className="flex items-start gap-2 text-xs">
+                                      <span className="text-muted-foreground min-w-[60px]">
+                                        {attr.attributeName}:
+                                      </span>
+                                      <div className="flex flex-wrap gap-1">
+                                        {attr.selectedValues?.map((val: { valueId: number; value: string; price: number }) => (
+                                          <Badge
+                                            key={val.valueId}
+                                            variant="secondary"
+                                            className="text-xs font-normal"
+                                          >
+                                            {val.value}
+                                            {val.price > 0 && (
+                                              <span className="ml-1 text-muted-foreground">
+                                                +₩{val.price.toLocaleString()}
+                                              </span>
+                                            )}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )
                         })}
@@ -376,14 +406,25 @@ export function WorkOrderDetailSheet({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>작업지시서 삭제</AlertDialogTitle>
-            <AlertDialogDescription>
-              {workOrder && (
-                <>
-                  <strong>{workOrder.orderNumber}</strong> ({workOrder.orderName})을(를) 삭제하시겠습니까?
-                  <br />
-                  <span className="text-destructive">이 작업은 되돌릴 수 없습니다.</span>
-                </>
-              )}
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                {workOrder && (
+                  <>
+                    <p>
+                      <strong>{workOrder.orderNumber}</strong> ({workOrder.orderName})을(를) 삭제하시겠습니까?
+                    </p>
+                    {workOrder.processes.length > 0 && (
+                      <div className="rounded-md bg-destructive/10 p-3 text-destructive text-sm">
+                        <p className="flex items-center gap-2 font-medium">
+                          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                          {workOrder.processes.length}개의 공정이 함께 삭제됩니다.
+                        </p>
+                      </div>
+                    )}
+                    <p className="text-destructive text-sm">이 작업은 되돌릴 수 없습니다.</p>
+                  </>
+                )}
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -14,6 +14,16 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   Table,
   TableBody,
   TableCell,
@@ -28,6 +38,7 @@ export function ProcessesPage() {
   const queryClient = useQueryClient()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingProcess, setEditingProcess] = useState<Process | null>(null)
+  const [deletingProcess, setDeletingProcess] = useState<Process | null>(null)
   const [formData, setFormData] = useState<ProcessCreateRequest>({
     name: '',
     color: '#3B82F6',
@@ -69,10 +80,12 @@ export function ProcessesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['processes'] })
       toast.success('공정이 삭제되었습니다')
+      setDeletingProcess(null)
     },
     onError: (error: any) => {
       const message = error.response?.data?.message || '공정 삭제에 실패했습니다'
       toast.error(message)
+      setDeletingProcess(null)
     },
   })
 
@@ -108,8 +121,12 @@ export function ProcessesPage() {
       toast.error('시스템 공정은 삭제할 수 없습니다')
       return
     }
-    if (window.confirm('이 공정을 삭제하시겠습니까?')) {
-      deleteMutation.mutate(process.id)
+    setDeletingProcess(process)
+  }
+
+  const confirmDelete = () => {
+    if (deletingProcess) {
+      deleteMutation.mutate(deletingProcess.id)
     }
   }
 
@@ -275,6 +292,33 @@ export function ProcessesPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* 삭제 확인 다이얼로그 */}
+      <AlertDialog open={!!deletingProcess} onOpenChange={(open) => !open && setDeletingProcess(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>공정 삭제</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deletingProcess && (
+                <>
+                  <strong>"{deletingProcess.name}"</strong> 공정을 삭제하시겠습니까?
+                  <br />
+                  <span className="text-destructive">이 작업은 되돌릴 수 없습니다.</span>
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending ? '삭제 중...' : '삭제'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

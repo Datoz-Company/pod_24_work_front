@@ -10,6 +10,7 @@ import {
   LogOut,
   Building2,
   Sliders,
+  ClipboardList,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/authStore'
@@ -17,6 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 
 const menuItems = [
+  { path: '/orders', label: '주문 관리', icon: ClipboardList },
   { path: '/work-status', label: '작업 현황 관리', icon: LayoutDashboard },
   { path: '/processes', label: '공정 관리', icon: Workflow },
   { path: '/product-processes', label: '상품별 작업 공정', icon: ListTodo },

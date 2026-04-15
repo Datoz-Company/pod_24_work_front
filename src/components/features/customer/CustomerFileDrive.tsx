@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQueries } from '@tanstack/react-query'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
-import { Grid3X3, List, Loader2, FolderOpen, Image, FileText, Files } from 'lucide-react'
+import { Grid3X3, List, Loader2, FolderOpen, Image, FileText, Files, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Toggle } from '@/components/ui/toggle'
 import { Badge } from '@/components/ui/badge'
@@ -177,8 +177,9 @@ export function CustomerFileDrive({ workOrders, isLoading }: CustomerFileDrivePr
             <div key={workOrder.id} className="space-y-3">
               {/* 주문 그룹 헤더 */}
               <div className="flex items-center gap-2 border-b pb-2">
-                <span className="text-sm font-medium text-primary">
-                  📦 {workOrder.orderNumber}
+                <span className="flex items-center gap-1.5 text-sm font-medium text-primary">
+                  <Package className="h-4 w-4" />
+                  {workOrder.orderNumber}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   ({format(new Date(workOrder.createdAt), 'yyyy.MM.dd', {
