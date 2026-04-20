@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, X, ArrowRight } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 import { productService } from '@/services/productService'
 import { processService } from '@/services/processService'
 import { Button } from '@/components/ui/button'
@@ -146,7 +146,6 @@ export function ProductProcessesPage() {
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
                   {allProcesses.map((process) => {
                     const isSelected = selectedProcessIds.includes(process.id)
-                    const order = selectedProcessIds.indexOf(process.id) + 1
                     const isSystem = process.isSystem
 
                     return (
@@ -162,11 +161,6 @@ export function ProductProcessesPage() {
                           isSystem && 'cursor-not-allowed opacity-80'
                         )}
                       >
-                        {isSelected && (
-                          <Badge className="absolute -right-2 -top-2">
-                            {order}
-                          </Badge>
-                        )}
                         <div
                           className="mb-2 h-3 w-8 rounded"
                           style={{ backgroundColor: process.color }}
@@ -193,35 +187,6 @@ export function ProductProcessesPage() {
               </CardContent>
             </Card>
 
-            {selectedProcessIds.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">공정 순서 미리보기</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {selectedProcessIds.map((processId, index) => {
-                      const process = allProcesses.find((p) => p.id === processId)
-                      if (!process) return null
-
-                      return (
-                        <div key={processId} className="flex items-center gap-2">
-                          <Badge
-                            style={{ backgroundColor: process.color }}
-                            className="text-white"
-                          >
-                            {index + 1}. {process.name}
-                          </Badge>
-                          {index < selectedProcessIds.length - 1 && (
-                            <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </div>
         ) : (
           <div className="flex h-full items-center justify-center text-muted-foreground">

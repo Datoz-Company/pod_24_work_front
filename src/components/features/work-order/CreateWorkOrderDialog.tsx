@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format } from 'date-fns'
-import { X, Paperclip } from 'lucide-react'
+import { X, Paperclip, Check } from 'lucide-react'
 import { productService } from '@/services/productService'
 import { workOrderService } from '@/services/workOrderService'
 import { optionService } from '@/services/optionService'
@@ -37,8 +37,9 @@ interface CreateWorkOrderDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
-interface FormData extends Omit<WorkOrderCreateRequest, 'options'> {
+interface FormData extends Omit<WorkOrderCreateRequest, 'options' | 'processIds'> {
   options: WorkOrderOptionRequest[]
+  processIds: number[]
 }
 
 export function CreateWorkOrderDialog({
@@ -55,6 +56,7 @@ export function CreateWorkOrderDialog({
     dueDate: undefined,
     memo: '',
     options: [],
+    processIds: [],
   })
   const [showNoProcessWarning, setShowNoProcessWarning] = useState(false)
   const [requiredOptionError, setRequiredOptionError] = useState<string | null>(null)
@@ -101,6 +103,7 @@ export function CreateWorkOrderDialog({
       dueDate: undefined,
       memo: '',
       options: [],
+      processIds: [],
     })
     setShowNoProcessWarning(false)
     setRequiredOptionError(null)
@@ -145,7 +148,6 @@ export function CreateWorkOrderDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    const selectedProduct = products.find((p) => p.id === formData.productId)
     if (selectedProduct && (!selectedProduct.processes || selectedProduct.processes.length === 0)) {
       setShowNoProcessWarning(true)
       return
@@ -154,6 +156,15 @@ export function CreateWorkOrderDialog({
     // 필수 옵션 검증
     if (!validateRequiredOptions()) {
       return
+    }
+
+    // 선택된 공정이 없으면 경고
+    const nonSystemProcessIds = formData.processIds.filter((id) => {
+      const process = selectedProduct?.processes?.find((p) => p.id === id)
+      return process && !process.isSystem
+    })
+    if (nonSystemProcessIds.length === 0 && selectedProduct?.processes?.some((p) => !p.isSystem)) {
+      return // 공정이 하나도 선택되지 않음
     }
 
     // options를 WorkOrderCreateRequest 형태로 변환
@@ -166,6 +177,7 @@ export function CreateWorkOrderDialog({
       dueDate: formData.dueDate,
       memo: formData.memo,
       options: formData.options.length > 0 ? formData.options : undefined,
+      processIds: formData.processIds.length > 0 ? formData.processIds : undefined,
     }
 
     try {
@@ -201,9 +213,13 @@ export function CreateWorkOrderDialog({
 
   const handleProductChange = (value: string) => {
     const productId = Number(value)
-    setFormData({ ...formData, productId, options: [] })
-
     const selectedProduct = products.find((p) => p.id === productId)
+
+    // 상품의 공정을 기본으로 모두 선택
+    const defaultProcessIds = selectedProduct?.processes?.map((p) => p.id) || []
+
+    setFormData({ ...formData, productId, options: [], processIds: defaultProcessIds })
+
     if (selectedProduct && (!selectedProduct.processes || selectedProduct.processes.length === 0)) {
       setShowNoProcessWarning(true)
     } else {
@@ -215,6 +231,27 @@ export function CreateWorkOrderDialog({
     setFormData({ ...formData, options })
     setRequiredOptionError(null)
   }
+
+  // 공정 선택/해제 핸들러
+  const handleProcessToggle = (processId: number, isSystem: boolean) => {
+    // 시스템 공정은 해제 불가
+    if (isSystem) return
+
+    setFormData((prev) => {
+      const isSelected = prev.processIds.includes(processId)
+      if (isSelected) {
+        return { ...prev, processIds: prev.processIds.filter((id) => id !== processId) }
+      } else {
+        return { ...prev, processIds: [...prev.processIds, processId] }
+      }
+    })
+  }
+
+  // 선택된 상품의 공정 목록 (시스템 공정 제외한 것만 선택 가능)
+  const selectedProduct = useMemo(
+    () => products.find((p) => p.id === formData.productId),
+    [products, formData.productId]
+  )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -250,6 +287,47 @@ export function CreateWorkOrderDialog({
               </p>
             )}
           </div>
+
+          {/* 공정 선택 */}
+          {selectedProduct && selectedProduct.processes && selectedProduct.processes.length > 0 && (
+            <div className="space-y-2">
+              <Label>공정 선택</Label>
+              <div className="flex flex-wrap gap-2">
+                {selectedProduct.processes.map((process) => {
+                  const isSelected = formData.processIds.includes(process.id)
+                  const isSystem = process.isSystem
+
+                  return (
+                    <button
+                      key={process.id}
+                      type="button"
+                      onClick={() => handleProcessToggle(process.id, isSystem ?? false)}
+                      disabled={isSystem}
+                      className={`
+                        flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border transition-all
+                        ${isSystem
+                          ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200'
+                          : isSelected
+                            ? 'bg-primary text-primary-foreground border-primary'
+                            : 'bg-white text-gray-700 border-gray-300 hover:border-primary/50'
+                        }
+                      `}
+                    >
+                      <div
+                        className="w-2.5 h-2.5 rounded-full"
+                        style={{ backgroundColor: process.color }}
+                      />
+                      <span>{process.name}</span>
+                      {isSelected && <Check className="h-3 w-3" />}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                시스템 공정(작업 전, 작업 완료)은 자동으로 포함됩니다.
+              </p>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="orderName">작업명 *</Label>

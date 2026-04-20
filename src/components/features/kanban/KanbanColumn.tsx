@@ -10,6 +10,29 @@ interface KanbanColumnProps {
   isHighlighted?: boolean
 }
 
+// 공정 색상을 연한 배경색으로 변환 (10% opacity 효과)
+const hexToLightBg = (hexColor: string): string => {
+  const hex = hexColor.replace('#', '')
+  const r = parseInt(hex.substring(0, 2), 16)
+  const g = parseInt(hex.substring(2, 4), 16)
+  const b = parseInt(hex.substring(4, 6), 16)
+  // 흰색과 블렌딩 (10% 원래 색상, 90% 흰색)
+  const blendR = Math.round(r * 0.1 + 255 * 0.9)
+  const blendG = Math.round(g * 0.1 + 255 * 0.9)
+  const blendB = Math.round(b * 0.1 + 255 * 0.9)
+  return `rgb(${blendR}, ${blendG}, ${blendB})`
+}
+
+// 시스템 공정별 기본 배경색 (참고 프로젝트 기준)
+const getColumnBgColor = (process: KanbanColumnType['process']): string => {
+  if (process.isSystem) {
+    if (process.systemType === 'PENDING') return '#F2F2F2' // 작업 전: 연한 회색
+    if (process.systemType === 'COMPLETED') return '#E8EFFF' // 작업 완료: 연한 파란색
+  }
+  // 일반 공정: 공정 색상을 연하게 적용
+  return hexToLightBg(process.color)
+}
+
 export function KanbanColumn({ column, onCardClick, isHighlighted = false }: KanbanColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: `column-${column.process.id}`,
@@ -29,43 +52,35 @@ export function KanbanColumn({ column, onCardClick, isHighlighted = false }: Kan
   })
 
   return (
-    <div
-      ref={setNodeRef}
-      className={cn(
-        'flex h-full w-72 flex-shrink-0 flex-col rounded-lg bg-muted transition-all duration-200',
-        isOver && 'bg-primary/10 ring-2 ring-primary ring-inset',
-        isHighlighted && 'bg-primary/5'
-      )}
-    >
-      <div
-        className="flex items-center justify-between rounded-t-lg px-3 py-2"
-        style={{ backgroundColor: column.process.color }}
-      >
-        <h3 className="font-semibold text-white">{column.process.name}</h3>
-        <span className="rounded-full bg-white/20 px-2 py-0.5 text-sm text-white">
-          {column.cards.length}
-        </span>
+    <div className="flex flex-col min-w-[220px] w-[220px] flex-shrink-0">
+      {/* 컬럼 헤더 - 단순 텍스트 스타일 */}
+      <div className="mb-3 px-2">
+        <h3 className="text-sm font-medium text-gray-700">
+          {column.process.name} ({column.cards.length})
+        </h3>
       </div>
 
-      <div className="flex-1 space-y-2 overflow-y-auto p-2 min-h-[100px]">
-        <SortableContext items={allDraggableIds} strategy={verticalListSortingStrategy}>
-          {column.cards.map((card) => (
-            <KanbanCard
-              key={`${card.workOrderId}-${card.workOrderProcessId ?? 'completed'}`}
-              card={card}
-              onClick={() => onCardClick?.(card)}
-            />
-          ))}
-        </SortableContext>
-
-        {column.cards.length === 0 && (
-          <div className={cn(
-            "flex h-24 items-center justify-center rounded-lg border-2 border-dashed text-sm text-muted-foreground transition-colors",
-            isOver ? "border-primary bg-primary/5" : "border-gray-300"
-          )}>
-            {isOver ? "여기에 놓기" : "작업 없음"}
-          </div>
+      {/* 컬럼 바디 */}
+      <div
+        ref={setNodeRef}
+        className={cn(
+          'flex-1 rounded-lg p-3 transition-all duration-200 min-h-[500px] overflow-hidden',
+          isOver && 'ring-2 ring-blue-400',
+          isHighlighted && !isOver && 'ring-2 ring-blue-300 ring-dashed'
         )}
+        style={{ backgroundColor: getColumnBgColor(column.process) }}
+      >
+        <div className="space-y-3 w-full">
+          <SortableContext items={allDraggableIds} strategy={verticalListSortingStrategy}>
+            {column.cards.map((card) => (
+              <KanbanCard
+                key={`${card.workOrderId}-${card.workOrderProcessId ?? 'completed'}`}
+                card={card}
+                onClick={() => onCardClick?.(card)}
+              />
+            ))}
+          </SortableContext>
+        </div>
       </div>
     </div>
   )

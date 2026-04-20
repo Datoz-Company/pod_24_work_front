@@ -52,23 +52,18 @@ export function CompletedProcessMiniCard({
       {...attributes}
       {...listeners}
       className={cn(
-        'flex items-center justify-between rounded-md border bg-white p-2 cursor-grab touch-none',
+        'flex items-center gap-2 rounded-md border bg-white p-2 cursor-grab touch-none overflow-hidden',
         'hover:shadow-md hover:border-primary/50 hover:bg-gray-50 active:cursor-grabbing',
         'transition-all duration-150',
         isDragging && 'opacity-60 shadow-lg scale-105 ring-2 ring-primary'
       )}
     >
-      <div className="flex items-center gap-2">
-        <GripVertical className="h-4 w-4 text-gray-400 flex-shrink-0" />
-        <CheckCircle2
-          className="h-4 w-4 flex-shrink-0"
-          style={{ color: processInfo.processColor || '#14b8a6' }}
-        />
-        <span className="text-sm font-medium">{processInfo.processName}</span>
-      </div>
-      <span className="text-[10px] text-muted-foreground bg-gray-100 px-1.5 py-0.5 rounded">
-        드래그하여 복구
-      </span>
+      <GripVertical className="h-4 w-4 text-gray-400 flex-shrink-0" />
+      <CheckCircle2
+        className="h-4 w-4 flex-shrink-0"
+        style={{ color: processInfo.processColor || '#14b8a6' }}
+      />
+      <span className="text-sm font-medium truncate flex-1 min-w-0">{processInfo.processName}</span>
     </div>
   )
 }

@@ -201,6 +201,7 @@ export interface WorkOrderCreateRequest {
   dueDate?: string
   memo?: string
   options?: WorkOrderOptionRequest[]
+  processIds?: number[]  // 선택된 공정 ID 목록 (미지정 시 상품의 전체 공정 적용)
 }
 
 export interface ProcessCreateRequest {
