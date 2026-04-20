@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useCallback, useEffect } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -21,11 +21,14 @@ import { KanbanCard } from './KanbanCard'
 import { MiniCardDragOverlay } from './MiniCardDragOverlay'
 import { ProcessGroupDropZone } from './ProcessGroupDropZone'
 import { WorkOrderDetailSheet } from './WorkOrderDetailSheet'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 import type { KanbanCard as KanbanCardType, KanbanColumn as KanbanColumnType } from '@/types'
 
 interface KanbanBoardProps {
   onCardClick?: (card: KanbanCardType) => void
 }
+
+const COLUMN_WIDTH = 280
 
 export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
   const queryClient = useQueryClient()
@@ -38,11 +41,57 @@ export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
   const [selectedProcessId, setSelectedProcessId] = useState<number | null>(null)
   const [isSheetOpen, setIsSheetOpen] = useState(false)
 
+  // 스크롤 관련 상태
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const [canScrollLeft, setCanScrollLeft] = useState(false)
+  const [canScrollRight, setCanScrollRight] = useState(false)
+
+  // 스크롤 가능 여부 체크
+  const checkScrollability = useCallback(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const { scrollLeft, scrollWidth, clientWidth } = container
+    setCanScrollLeft(scrollLeft > 0)
+    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 1)
+  }, [])
+
+  // 스크롤 이동 핸들러
+  const handleScrollLeft = useCallback(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+    container.scrollBy({ left: -COLUMN_WIDTH, behavior: 'smooth' })
+  }, [])
+
+  const handleScrollRight = useCallback(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+    container.scrollBy({ left: COLUMN_WIDTH, behavior: 'smooth' })
+  }, [])
+
   const { data: columns = [], isLoading } = useQuery({
     queryKey: ['kanban'],
     queryFn: kanbanService.getBoard,
     refetchInterval: 30000,
   })
+
+  // 스크롤 이벤트 리스너
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    // 초기 체크 및 컬럼 변경 시 재체크
+    const timer = setTimeout(checkScrollability, 100)
+
+    container.addEventListener('scroll', checkScrollability)
+    window.addEventListener('resize', checkScrollability)
+
+    return () => {
+      clearTimeout(timer)
+      container.removeEventListener('scroll', checkScrollability)
+      window.removeEventListener('resize', checkScrollability)
+    }
+  }, [checkScrollability, columns])
 
   const moveMutation = useMutation({
     mutationFn: kanbanService.moveCard,
@@ -290,67 +339,115 @@ export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
   }
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={customCollisionDetection}
-      onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
-      onDragEnd={handleDragEnd}
-    >
-      <div className="flex h-full gap-4 overflow-x-auto p-4">
-        {/* 작업 전 컬럼 */}
-        {pendingColumns.map((column) => (
-          <KanbanColumn
-            key={column.process.id}
-            column={column}
-            onCardClick={handleCardClick}
-          />
-        ))}
+    <div className="h-full">
+      {/* 스크롤바 숨김 스타일 */}
+      <style>{`
+        .kanban-scroll-container {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        .kanban-scroll-container::-webkit-scrollbar {
+          display: none;
+          width: 0;
+          height: 0;
+        }
+      `}</style>
 
-        {/* 중간 공정 그룹 (드롭 영역) */}
-        {middleColumns.length > 0 && (
-          <ProcessGroupDropZone
-            id="process-group-drop-zone"
-            isHighlighted={shouldHighlightProcessGroup}
-            overlayText={isDraggingMiniCard ? '여기에 놓아 공정 복구하기' : '여기에 놓아 작업 시작하기'}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={customCollisionDetection}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="relative h-full">
+          {/* 왼쪽 스크롤 버튼 */}
+          {canScrollLeft && (
+            <button
+              onClick={handleScrollLeft}
+              className="absolute left-2 top-1/2 -translate-y-1/2 z-20
+                w-10 h-10 rounded-full bg-white/90 shadow-lg border border-gray-200
+                flex items-center justify-center
+                hover:bg-white hover:shadow-xl transition-all"
+              aria-label="이전 컬럼으로 이동"
+            >
+              <ChevronLeft className="w-5 h-5 text-gray-600" />
+            </button>
+          )}
+
+          {/* 오른쪽 스크롤 버튼 */}
+          {canScrollRight && (
+            <button
+              onClick={handleScrollRight}
+              className="absolute right-2 top-1/2 -translate-y-1/2 z-20
+                w-10 h-10 rounded-full bg-white/90 shadow-lg border border-gray-200
+                flex items-center justify-center
+                hover:bg-white hover:shadow-xl transition-all"
+              aria-label="다음 컬럼으로 이동"
+            >
+              <ChevronRight className="w-5 h-5 text-gray-600" />
+            </button>
+          )}
+
+          <div
+            ref={scrollContainerRef}
+            className="kanban-scroll-container flex h-full gap-4 overflow-x-auto p-4"
           >
-            {middleColumns.map((column) => (
+            {/* 작업 전 컬럼 */}
+            {pendingColumns.map((column) => (
               <KanbanColumn
                 key={column.process.id}
                 column={column}
                 onCardClick={handleCardClick}
-                isHighlighted={shouldHighlightMiddleColumns}
               />
             ))}
-          </ProcessGroupDropZone>
-        )}
 
-        {/* 작업 완료 컬럼 */}
-        {completedColumns.map((column) => (
-          <KanbanColumn
-            key={column.process.id}
-            column={column}
-            onCardClick={handleCardClick}
-            isHighlighted={shouldHighlightCompletedColumn}
-          />
-        ))}
-      </div>
+            {/* 중간 공정 그룹 (드롭 영역) */}
+            {middleColumns.length > 0 && (
+              <ProcessGroupDropZone
+                id="process-group-drop-zone"
+                isHighlighted={shouldHighlightProcessGroup}
+                overlayText={isDraggingMiniCard ? '여기에 놓아 공정 복구하기' : '여기에 놓아 작업 시작하기'}
+              >
+                {middleColumns.map((column) => (
+                  <KanbanColumn
+                    key={column.process.id}
+                    column={column}
+                    onCardClick={handleCardClick}
+                    isHighlighted={shouldHighlightMiddleColumns}
+                  />
+                ))}
+              </ProcessGroupDropZone>
+            )}
 
-      <DragOverlay>
-        {activeCard && (
-          isDraggingMiniCard
-            ? <MiniCardDragOverlay card={activeCard} />
-            : <KanbanCard card={activeCard} />
-        )}
-      </DragOverlay>
+            {/* 작업 완료 컬럼 */}
+            {completedColumns.map((column) => (
+              <KanbanColumn
+                key={column.process.id}
+                column={column}
+                onCardClick={handleCardClick}
+                isHighlighted={shouldHighlightCompletedColumn}
+              />
+            ))}
+          </div>
+        </div>
 
-      {/* 작업지시서 상세 Sheet */}
-      <WorkOrderDetailSheet
-        workOrderId={selectedWorkOrderId}
-        editableProcessId={selectedProcessId}
-        open={isSheetOpen}
-        onOpenChange={handleSheetOpenChange}
-      />
-    </DndContext>
+        <DragOverlay>
+          {activeCard && (
+            isDraggingMiniCard
+              ? <MiniCardDragOverlay card={activeCard} />
+              : <KanbanCard card={activeCard} />
+          )}
+        </DragOverlay>
+
+        {/* 작업지시서 상세 Sheet */}
+        <WorkOrderDetailSheet
+          workOrderId={selectedWorkOrderId}
+          editableProcessId={selectedProcessId}
+          open={isSheetOpen}
+          onOpenChange={handleSheetOpenChange}
+        />
+      </DndContext>
+    </div>
   )
 }

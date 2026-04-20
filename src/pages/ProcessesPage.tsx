@@ -163,7 +163,6 @@ export function ProcessesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-12"></TableHead>
-                <TableHead className="w-16">순서</TableHead>
                 <TableHead>공정명</TableHead>
                 <TableHead className="w-32">색상</TableHead>
                 <TableHead className="w-24 text-center">작업</TableHead>
@@ -182,7 +181,6 @@ export function ProcessesPage() {
                       <GripVertical className="h-4 w-4 cursor-grab text-gray-400" />
                     )}
                   </TableCell>
-                  <TableCell className="text-gray-500">{process.displayOrder}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{process.name}</span>
