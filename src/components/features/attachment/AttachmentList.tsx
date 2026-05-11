@@ -29,6 +29,7 @@ interface AttachmentListProps {
   workOrderId: number
   attachments: Attachment[]
   isLoading?: boolean
+  compact?: boolean
 }
 
 function formatFileSize(bytes: number): string {
@@ -48,6 +49,7 @@ export function AttachmentList({
   workOrderId,
   attachments,
   isLoading = false,
+  compact = false,
 }: AttachmentListProps) {
   const queryClient = useQueryClient()
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null)
@@ -96,12 +98,47 @@ export function AttachmentList({
 
   return (
     <>
-      <div className="space-y-2">
+      <div className={compact ? "flex flex-wrap gap-1" : "space-y-2"}>
         {attachments.map((attachment) => {
           const isImage = attachment.contentType.startsWith('image/')
           const isPdf = attachment.contentType === 'application/pdf'
           const canPreview = isImage || isPdf
 
+          // 컴팩트 모드
+          if (compact) {
+            return (
+              <div
+                key={attachment.id}
+                className="group flex items-center gap-1.5 rounded-full border pl-1.5 pr-2 py-1 text-xs hover:bg-muted/50"
+              >
+                <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted overflow-hidden">
+                  {isImage && attachment.downloadUrl ? (
+                    <img
+                      src={attachment.downloadUrl}
+                      alt={attachment.originalFilename}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="text-muted-foreground scale-75">
+                      {getFileIcon(attachment.contentType)}
+                    </div>
+                  )}
+                </div>
+                <span className="truncate max-w-[100px]">{attachment.originalFilename}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive"
+                  onClick={() => setDeleteTarget(attachment)}
+                  title="삭제"
+                >
+                  <Trash2 className="h-3 w-3" />
+                </Button>
+              </div>
+            )
+          }
+
+          // 기본 모드
           return (
             <div
               key={attachment.id}

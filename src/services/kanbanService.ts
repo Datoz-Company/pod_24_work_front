@@ -2,8 +2,9 @@ import api from './api'
 import type { ApiResponse, KanbanColumn, KanbanMoveRequest, WorkOrder, ProcessStatus } from '@/types'
 
 export const kanbanService = {
-  getBoard: async (): Promise<KanbanColumn[]> => {
-    const response = await api.get<ApiResponse<KanbanColumn[]>>('/kanban')
+  getBoard: async (orderId?: number): Promise<KanbanColumn[]> => {
+    const params = orderId ? `?orderId=${orderId}` : ''
+    const response = await api.get<ApiResponse<KanbanColumn[]>>(`/kanban${params}`)
     return response.data.data
   },
 
@@ -22,6 +23,16 @@ export const kanbanService = {
 
   startWork: async (workOrderId: number): Promise<WorkOrder> => {
     const response = await api.post<ApiResponse<WorkOrder>>('/kanban/start-work', { workOrderId })
+    return response.data.data
+  },
+
+  resetAllProcesses: async (workOrderId: number): Promise<WorkOrder> => {
+    const response = await api.post<ApiResponse<WorkOrder>>('/kanban/reset-all-processes', { workOrderId })
+    return response.data.data
+  },
+
+  deleteWorkOrderProcess: async (workOrderProcessId: number): Promise<WorkOrder> => {
+    const response = await api.delete<ApiResponse<WorkOrder>>(`/kanban/process/${workOrderProcessId}`)
     return response.data.data
   },
 }

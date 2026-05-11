@@ -24,12 +24,14 @@ interface CustomerComboboxProps {
   value?: number
   onChange: (customerId: number | undefined, customer?: Customer) => void
   placeholder?: string
+  className?: string
 }
 
 export function CustomerCombobox({
   value,
   onChange,
   placeholder = '고객을 검색하세요',
+  className,
 }: CustomerComboboxProps) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -92,7 +94,7 @@ export function CustomerCombobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between font-normal"
+          className={cn("w-full justify-between font-normal", className)}
         >
           {selectedCustomer ? (
             selectedCustomer.name

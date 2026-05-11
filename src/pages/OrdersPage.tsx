@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Search, Filter, MoreHorizontal, Trash2, Eye } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -27,8 +28,7 @@ import {
 } from '@/components/ui/select'
 import { orderService } from '@/services/orderService'
 import { CreateOrderDialog } from '@/components/features/order/CreateOrderDialog'
-import { OrderDetailSheet } from '@/components/features/order/OrderDetailSheet'
-import type { Order, OrderStatus } from '@/types'
+import type { OrderStatus } from '@/types'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
 import { toast } from 'sonner'
@@ -41,10 +41,9 @@ const statusConfig: Record<OrderStatus, { label: string; variant: 'default' | 's
 }
 
 export function OrdersPage() {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
-  const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [page, setPage] = useState(0)
@@ -65,9 +64,8 @@ export function OrdersPage() {
     },
   })
 
-  const handleViewDetail = (order: Order) => {
-    setSelectedOrder(order)
-    setIsDetailOpen(true)
+  const handleViewDetail = (orderId: number) => {
+    navigate(`/orders/${orderId}`)
   }
 
   const handleDelete = (id: number) => {
@@ -153,7 +151,7 @@ export function OrdersPage() {
                   <TableRow
                     key={order.id}
                     className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleViewDetail(order)}
+                    onClick={() => handleViewDetail(order.id)}
                   >
                     <TableCell className="font-mono text-sm">{order.orderNumber}</TableCell>
                     <TableCell className="font-medium">{order.orderName}</TableCell>
@@ -189,7 +187,7 @@ export function OrdersPage() {
                           <DropdownMenuItem
                             onClick={(e: React.MouseEvent) => {
                               e.stopPropagation()
-                              handleViewDetail(order)
+                              handleViewDetail(order.id)
                             }}
                           >
                             <Eye className="mr-2 h-4 w-4" />
@@ -243,12 +241,6 @@ export function OrdersPage() {
       <CreateOrderDialog
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
-      />
-
-      <OrderDetailSheet
-        order={selectedOrder}
-        open={isDetailOpen}
-        onOpenChange={setIsDetailOpen}
       />
     </div>
   )

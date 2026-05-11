@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit, Trash2, Search } from 'lucide-react'
 import { customerService } from '@/services/customerService'
@@ -20,15 +21,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { CustomerDetailSheet } from '@/components/features/customer/CustomerDetailSheet'
 import type { Customer, CustomerCreateRequest } from '@/types'
 
 export function CustomersPage() {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [formData, setFormData] = useState<CustomerCreateRequest>({
     name: '',
     phone: '',
@@ -142,7 +142,7 @@ export function CustomersPage() {
                 <TableRow
                   key={customer.id}
                   className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => setSelectedCustomer(customer)}
+                  onClick={() => navigate(`/customers/${customer.id}`)}
                 >
                   <TableCell className="font-medium">{customer.name}</TableCell>
                   <TableCell>{customer.phone || '-'}</TableCell>
@@ -259,13 +259,6 @@ export function CustomersPage() {
           </form>
         </DialogContent>
       </Dialog>
-
-      {/* 고객 상세 Sheet */}
-      <CustomerDetailSheet
-        customer={selectedCustomer}
-        open={!!selectedCustomer}
-        onOpenChange={(open) => !open && setSelectedCustomer(null)}
-      />
     </div>
   )
 }

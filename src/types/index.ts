@@ -136,8 +136,10 @@ export interface CompletedProcessInfo {
 export interface KanbanCard {
   workOrderId: number
   workOrderProcessId?: number
+  orderId?: number  // 상위 주문 ID
   orderNumber: string
   orderName: string
+  orderGroupName?: string  // 상위 주문명 (주문에 속한 작업인 경우)
   productName?: string
   customerName?: string
   quantity: number
