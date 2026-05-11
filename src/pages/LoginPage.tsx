@@ -35,7 +35,7 @@ export function LoginPage() {
       })
       navigate('/work-status')
     } catch (err) {
-      setError('아이디 또는 비밀번호가 올바르지 않습니다.')
+      setError('아이디/이메일 또는 비밀번호가 올바르지 않습니다.')
     } finally {
       setIsLoading(false)
     }
@@ -54,13 +54,13 @@ export function LoginPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">아이디</Label>
+              <Label htmlFor="username">아이디 또는 이메일</Label>
               <Input
                 id="username"
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="아이디를 입력하세요"
+                placeholder="아이디 또는 이메일을 입력하세요"
                 className="focus-visible:ring-[#0073FF]"
                 required
               />
