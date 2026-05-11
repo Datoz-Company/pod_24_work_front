@@ -8,6 +8,7 @@ interface FileUploaderProps {
   isUploading?: boolean
   accept?: string
   maxSizeMB?: number
+  compact?: boolean
 }
 
 const DEFAULT_ACCEPT = '.pdf,.jpg,.jpeg,.png,.gif,.webp'
@@ -18,6 +19,7 @@ export function FileUploader({
   isUploading = false,
   accept = DEFAULT_ACCEPT,
   maxSizeMB = DEFAULT_MAX_SIZE_MB,
+  compact = false,
 }: FileUploaderProps) {
   const [isDragOver, setIsDragOver] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -95,6 +97,40 @@ export function FileUploader({
     },
     [handleFile]
   )
+
+  // 컴팩트 모드: 작은 버튼만 표시
+  if (compact) {
+    return (
+      <div className="relative">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          disabled={isUploading}
+        >
+          {isUploading ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <>
+              <Upload className="h-3 w-3 mr-1" />
+              파일 추가
+            </>
+          )}
+        </Button>
+        <input
+          type="file"
+          accept={accept}
+          onChange={handleInputChange}
+          className="absolute inset-0 cursor-pointer opacity-0"
+          disabled={isUploading}
+        />
+        {error && (
+          <p className="text-xs text-destructive mt-1">{error}</p>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-2">
