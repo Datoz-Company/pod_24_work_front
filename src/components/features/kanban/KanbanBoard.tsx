@@ -15,31 +15,49 @@ import {
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { kanbanService } from '@/services/kanbanService'
 import { KanbanColumn } from './KanbanColumn'
 import { KanbanCard } from './KanbanCard'
 import { MiniCardDragOverlay } from './MiniCardDragOverlay'
 import { ProcessGroupDropZone } from './ProcessGroupDropZone'
-import { WorkOrderDetailSheet } from './WorkOrderDetailSheet'
+import { WorkOrderPeekPanel } from './WorkOrderPeekPanel'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
 import type { KanbanCard as KanbanCardType, KanbanColumn as KanbanColumnType } from '@/types'
 
 interface KanbanBoardProps {
+  orderId?: number
   onCardClick?: (card: KanbanCardType) => void
 }
 
 const COLUMN_WIDTH = 280
 
-export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
+export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
   const queryClient = useQueryClient()
   const [activeCard, setActiveCard] = useState<KanbanCardType | null>(null)
   const [isDraggingMiniCard, setIsDraggingMiniCard] = useState(false)
   const [isDraggingFromPending, setIsDraggingFromPending] = useState(false)
   const [isDraggingFromMiddle, setIsDraggingFromMiddle] = useState(false)
   const [isOverProcessGroup, setIsOverProcessGroup] = useState(false)
+
+  // Peek 패널 상태
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<number | null>(null)
-  const [selectedProcessId, setSelectedProcessId] = useState<number | null>(null)
-  const [isSheetOpen, setIsSheetOpen] = useState(false)
+  const [isPeekOpen, setIsPeekOpen] = useState(false)
+
+  // 작업 전으로 되돌리기 다이얼로그 상태
+  const [showResetDialog, setShowResetDialog] = useState(false)
+  const [resetTargetCard, setResetTargetCard] = useState<KanbanCardType | null>(null)
 
   // 스크롤 관련 상태
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -70,8 +88,8 @@ export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
   }, [])
 
   const { data: columns = [], isLoading } = useQuery({
-    queryKey: ['kanban'],
-    queryFn: kanbanService.getBoard,
+    queryKey: orderId ? ['kanban', 'order', orderId] : ['kanban'],
+    queryFn: () => kanbanService.getBoard(orderId),
     refetchInterval: 30000,
   })
 
@@ -108,12 +126,29 @@ export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
   })
 
   const updateProcessStatusMutation = useMutation({
-    mutationFn: ({ workOrderProcessId, status }: { workOrderProcessId: number; status: 'IN_PROGRESS' | 'COMPLETED' }) =>
+    mutationFn: ({ workOrderProcessId, status }: { workOrderProcessId: number; status: 'IN_PROGRESS' | 'COMPLETED' | 'NOT_STARTED' }) =>
       kanbanService.updateProcessStatus(workOrderProcessId, status),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['kanban'] })
       // 상세 시트에서도 최신 상태를 보여주기 위해 workOrder 쿼리도 무효화
       queryClient.invalidateQueries({ queryKey: ['workOrder'] })
+    },
+  })
+
+  const resetAllProcessesMutation = useMutation({
+    mutationFn: kanbanService.resetAllProcesses,
+    onSuccess: () => {
+      // 모든 관련 쿼리 무효화하여 UI 즉시 갱신
+      queryClient.invalidateQueries({ queryKey: ['kanban'] })
+      queryClient.invalidateQueries({ queryKey: ['workOrder'] })
+      queryClient.invalidateQueries({ queryKey: ['order'] })
+      queryClient.invalidateQueries({ queryKey: ['orders'] })
+      toast.success('작업이 "작업 전" 상태로 변경되었습니다')
+      setShowResetDialog(false)
+      setResetTargetCard(null)
+    },
+    onError: () => {
+      toast.error('변경에 실패했습니다')
     },
   })
 
@@ -299,11 +334,44 @@ export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
       return
     }
 
+    // "작업 전" 컬럼으로 드래그하는 경우: 다이얼로그 표시
+    const isPendingColumn = overColumn.process.isSystem && overColumn.process.systemType === 'PENDING'
+    if (isPendingColumn && isMiddleProcessCard) {
+      // 다이얼로그 표시
+      setResetTargetCard(activeCard)
+      setShowResetDialog(true)
+      return
+    }
+
     // 그 외의 경우 (예: 작업 전 → 작업 전 등)
     moveMutation.mutate({
       workOrderId: activeCard.workOrderId,
       targetProcessId: overColumn.process.id,
     })
+  }
+
+  // 다이얼로그 핸들러
+  const handleResetAll = () => {
+    if (resetTargetCard) {
+      resetAllProcessesMutation.mutate(resetTargetCard.workOrderId)
+    }
+  }
+
+  const handleResetSingle = () => {
+    if (resetTargetCard?.workOrderProcessId) {
+      updateProcessStatusMutation.mutate({
+        workOrderProcessId: resetTargetCard.workOrderProcessId,
+        status: 'NOT_STARTED',
+      })
+      toast.success('해당 공정이 작업 전으로 변경되었습니다')
+      setShowResetDialog(false)
+      setResetTargetCard(null)
+    }
+  }
+
+  const handleResetDialogClose = () => {
+    setShowResetDialog(false)
+    setResetTargetCard(null)
   }
 
   if (isLoading) {
@@ -324,17 +392,14 @@ export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
 
   const handleCardClick = (card: KanbanCardType) => {
     setSelectedWorkOrderId(card.workOrderId)
-    // 중간 공정 카드인 경우 해당 공정 ID 저장 (수정 권한 판단용)
-    setSelectedProcessId(card.workOrderProcessId ?? null)
-    setIsSheetOpen(true)
+    setIsPeekOpen(true)
     onCardClick?.(card)
   }
 
-  const handleSheetOpenChange = (open: boolean) => {
-    setIsSheetOpen(open)
+  const handlePeekClose = (open: boolean) => {
+    setIsPeekOpen(open)
     if (!open) {
       setSelectedWorkOrderId(null)
-      setSelectedProcessId(null)
     }
   }
 
@@ -439,15 +504,49 @@ export function KanbanBoard({ onCardClick }: KanbanBoardProps) {
               : <KanbanCard card={activeCard} />
           )}
         </DragOverlay>
-
-        {/* 작업지시서 상세 Sheet */}
-        <WorkOrderDetailSheet
-          workOrderId={selectedWorkOrderId}
-          editableProcessId={selectedProcessId}
-          open={isSheetOpen}
-          onOpenChange={handleSheetOpenChange}
-        />
       </DndContext>
+
+      {/* 작업 상세 Peek 패널 */}
+      <WorkOrderPeekPanel
+        workOrderId={selectedWorkOrderId}
+        open={isPeekOpen}
+        onOpenChange={handlePeekClose}
+      />
+
+      {/* 작업 전으로 되돌리기 다이얼로그 */}
+      <AlertDialog open={showResetDialog} onOpenChange={handleResetDialogClose}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>작업 전으로 이동</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  모든 공정을 작업 전으로 이동 시키겠습니까?
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  "모든 작업 변경하기"를 선택하면 이 작업의 모든 공정이 작업 전 상태로 변경됩니다.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+            <AlertDialogCancel>취소</AlertDialogCancel>
+            <Button
+              variant="outline"
+              onClick={handleResetSingle}
+              disabled={updateProcessStatusMutation.isPending}
+            >
+              이 작업만 변경하기
+            </Button>
+            <AlertDialogAction
+              onClick={handleResetAll}
+              disabled={resetAllProcessesMutation.isPending}
+            >
+              {resetAllProcessesMutation.isPending ? '변경 중...' : '모든 작업 변경하기'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
