@@ -121,13 +121,24 @@ export function AttributeValueSelector({
           </Label>
           <Select
             value={currentSelectedIds[0]?.toString() || ''}
-            onValueChange={handleSingleSelect}
+            onValueChange={(value) => {
+              // 'none' 선택 시 선택 해제
+              if (value === 'none') {
+                onValueChange(attribute.id, [])
+              } else {
+                handleSingleSelect(value)
+              }
+            }}
             disabled={disabled}
           >
             <SelectTrigger>
               <SelectValue placeholder={`${attribute.name} 선택`} />
             </SelectTrigger>
             <SelectContent>
+              {/* 선택 해제 옵션 */}
+              <SelectItem value="none" className="text-muted-foreground">
+                선택 안함
+              </SelectItem>
               {enabledValues.map((value) => {
                 const state = getValueState(value.id)
                 if (state === 'hidden') return null
@@ -171,7 +182,14 @@ export function AttributeValueSelector({
                 <button
                   key={value.id}
                   type="button"
-                  onClick={() => onValueChange(attribute.id, [value.id])}
+                  onClick={() => {
+                    // 이미 선택된 경우 선택 해제, 아니면 선택
+                    if (isSelected) {
+                      onValueChange(attribute.id, [])
+                    } else {
+                      onValueChange(attribute.id, [value.id])
+                    }
+                  }}
                   disabled={disabled || state === 'disabled'}
                   className={cn(
                     'px-3 py-2 rounded-md border text-sm transition-colors',
