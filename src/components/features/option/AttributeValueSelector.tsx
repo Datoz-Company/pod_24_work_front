@@ -229,21 +229,27 @@ export function AttributeValueSelector({
               if (state === 'hidden') return null
               const isSelected = currentSelectedIds.includes(value.id)
               return (
-                <label
+                <button
                   key={value.id}
+                  type="button"
+                  onClick={() => handleMultiSelect(value.id, !isSelected)}
+                  disabled={disabled || state === 'disabled'}
                   className={cn(
                     'flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition-colors',
-                    isSelected ? 'border-primary bg-primary/10' : 'border-input',
+                    isSelected ? 'border-primary bg-primary/10' : 'border-input hover:bg-accent',
                     (disabled || state === 'disabled') && 'opacity-50 cursor-not-allowed'
                   )}
                 >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={(e) => handleMultiSelect(value.id, e.target.checked)}
-                    disabled={disabled || state === 'disabled'}
-                    className="h-4 w-4"
-                  />
+                  <div className={cn(
+                    'h-4 w-4 rounded border flex items-center justify-center',
+                    isSelected ? 'bg-primary border-primary' : 'border-input'
+                  )}>
+                    {isSelected && (
+                      <svg className="h-3 w-3 text-primary-foreground" viewBox="0 0 12 12" fill="none">
+                        <path d="M10 3L4.5 8.5L2 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </div>
                   <span className="text-sm">
                     {value.value}
                     {value.price > 0 && (
@@ -252,7 +258,7 @@ export function AttributeValueSelector({
                       </span>
                     )}
                   </span>
-                </label>
+                </button>
               )
             })}
           </div>
