@@ -131,6 +131,7 @@ export interface ProductOptionUpdateRequest {
 export interface WorkOrderOptionRequest {
   optionId: number
   selectedAttributeValueIds: number[]
+  inputValues?: Record<number, string>  // attributeId -> 입력값 (INPUT_TEXT, INPUT_NUMBER용)
   optionCount?: number
 }
 

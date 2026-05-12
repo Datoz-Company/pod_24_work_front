@@ -156,6 +156,38 @@ export function OptionSelector({
     [selectedOptions, productOptions, onOptionsChange]
   )
 
+  // INPUT_TEXT, INPUT_NUMBER 입력값 변경 핸들러
+  const handleInputChange = useCallback(
+    (optionId: number, attributeId: number, value: string) => {
+      const existingOption = selectedOptions.find((opt) => opt.optionId === optionId)
+
+      if (existingOption) {
+        const updatedOption: WorkOrderOptionRequest = {
+          ...existingOption,
+          inputValues: {
+            ...existingOption.inputValues,
+            [attributeId]: value,
+          },
+        }
+
+        onOptionsChange(
+          selectedOptions.map((opt) =>
+            opt.optionId === optionId ? updatedOption : opt
+          )
+        )
+      } else {
+        const newOption: WorkOrderOptionRequest = {
+          optionId,
+          selectedAttributeValueIds: [],
+          inputValues: { [attributeId]: value },
+          optionCount: 1,
+        }
+        onOptionsChange([...selectedOptions, newOption])
+      }
+    },
+    [selectedOptions, onOptionsChange]
+  )
+
   // 선택된 옵션의 총 추가 금액 계산
   const totalAdditionalPrice = useMemo(() => {
     let total = 0
@@ -254,6 +286,11 @@ export function OptionSelector({
                     allowedChildValueIds={allowedChildValueIds}
                     parentAttributeName={parentAttribute?.name}
                     isParentValueSelected={parentValueSelected}
+                    // INPUT_TEXT, INPUT_NUMBER용 props
+                    inputValues={currentSelection?.inputValues || {}}
+                    onInputChange={(attrId, value) =>
+                      handleInputChange(option.id, attrId, value)
+                    }
                   />
                 )
               })}

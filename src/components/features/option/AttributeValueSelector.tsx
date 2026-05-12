@@ -29,6 +29,9 @@ interface AttributeValueSelectorProps {
   allowedChildValueIds?: number[] | null  // 부모 값에서 허용된 자식 값 ID 목록 (null이면 필터링 안함)
   parentAttributeName?: string            // 부모 속성 이름 (자식 속성인 경우)
   isParentValueSelected?: boolean         // 부모 값이 선택되었는지 여부
+  // INPUT_TEXT, INPUT_NUMBER용 props
+  inputValues?: Record<number, string>    // attributeId -> 입력값
+  onInputChange?: (attributeId: number, value: string) => void
 }
 
 export function AttributeValueSelector({
@@ -40,7 +43,12 @@ export function AttributeValueSelector({
   allowedChildValueIds = null,
   parentAttributeName,
   isParentValueSelected = true,
+  inputValues = {},
+  onInputChange,
 }: AttributeValueSelectorProps) {
+  // 값 없이 동작하는 타입들 (입력 필드, 토글 등)
+  const isValuelessType = ['INPUT_TEXT', 'INPUT_NUMBER', 'TOGGLE_BUTTON'].includes(attribute.previewType)
+
   // 기본 활성화된 값 필터링
   let enabledValues = attribute.values.filter((v) => v.isEnabled)
 
@@ -48,11 +56,11 @@ export function AttributeValueSelector({
   const isChildAttribute = attribute.isChildAttribute
   const hasAllowedFilter = allowedChildValueIds !== null
 
-  if (isChildAttribute && hasAllowedFilter) {
+  if (isChildAttribute && hasAllowedFilter && !isValuelessType) {
     enabledValues = enabledValues.filter((v) => allowedChildValueIds.includes(v.id))
   }
 
-  // 자식 속성인데 부모 값이 선택되지 않은 경우
+  // 자식 속성인데 부모 값이 선택되지 않은 경우 (TOGGLE_BUTTON 부모의 경우 토글 OFF)
   if (isChildAttribute && !isParentValueSelected) {
     return (
       <div className="space-y-2">
@@ -63,14 +71,14 @@ export function AttributeValueSelector({
           </Badge>
         </Label>
         <div className="p-3 border border-dashed rounded-md bg-muted/50 text-sm text-muted-foreground">
-          먼저 "{parentAttributeName || '부모 속성'}"의 값을 선택해주세요.
+          {parentAttributeName ? `"${parentAttributeName}"을(를) 활성화해주세요.` : '부모 속성을 먼저 선택해주세요.'}
         </div>
       </div>
     )
   }
 
-  // 자식 속성인데 연결된 자식 값이 없는 경우
-  if (isChildAttribute && hasAllowedFilter && enabledValues.length === 0) {
+  // 자식 속성인데 연결된 자식 값이 없는 경우 (값이 필요한 타입만 체크)
+  if (isChildAttribute && hasAllowedFilter && enabledValues.length === 0 && !isValuelessType) {
     return (
       <div className="space-y-2">
         <Label className="flex items-center gap-2">
@@ -268,10 +276,19 @@ export function AttributeValueSelector({
     case 'INPUT_NUMBER':
       return (
         <div className="space-y-2">
-          <Label>{attribute.name}</Label>
+          <Label className="flex items-center gap-2">
+            {attribute.name}
+            {isChildAttribute && (
+              <Badge variant="outline" className="text-xs text-muted-foreground">
+                자식 속성
+              </Badge>
+            )}
+          </Label>
           <Input
             type="number"
             placeholder={`${attribute.name} 입력`}
+            value={inputValues[attribute.id] || ''}
+            onChange={(e) => onInputChange?.(attribute.id, e.target.value)}
             disabled={disabled}
             className="max-w-[200px]"
           />
@@ -281,10 +298,19 @@ export function AttributeValueSelector({
     case 'INPUT_TEXT':
       return (
         <div className="space-y-2">
-          <Label>{attribute.name}</Label>
+          <Label className="flex items-center gap-2">
+            {attribute.name}
+            {isChildAttribute && (
+              <Badge variant="outline" className="text-xs text-muted-foreground">
+                자식 속성
+              </Badge>
+            )}
+          </Label>
           <Input
             type="text"
             placeholder={`${attribute.name} 입력`}
+            value={inputValues[attribute.id] || ''}
+            onChange={(e) => onInputChange?.(attribute.id, e.target.value)}
             disabled={disabled}
           />
         </div>
