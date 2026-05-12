@@ -592,14 +592,17 @@ export function OptionsPage() {
                                       <Link2 className="h-4 w-4 mr-1" />
                                       {hasChildren ? `하위 (${childAttributes.length})` : '하위 연결'}
                                     </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => openValueDialog(attr.id)}
-                                    >
-                                      <Plus className="h-4 w-4 mr-1" />
-                                      값
-                                    </Button>
+                                    {/* TOGGLE_BUTTON 타입은 값 추가 불가 (true/false만 가능) */}
+                                    {attr.previewType !== 'TOGGLE_BUTTON' && (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => openValueDialog(attr.id)}
+                                      >
+                                        <Plus className="h-4 w-4 mr-1" />
+                                        값
+                                      </Button>
+                                    )}
                                     <Button
                                       variant="ghost"
                                       size="icon"
@@ -617,58 +620,72 @@ export function OptionsPage() {
                                   </div>
                                 </div>
 
-                                {/* 속성의 값들 */}
+                                {/* 속성의 값들 - TOGGLE_BUTTON은 값 대신 설명 표시 */}
                                 <div className="flex flex-wrap gap-2">
-                                  {attr.values.map((value) => {
-                                    const hasChildValues = value.hasChildValues || (value.childValueIds && value.childValueIds.length > 0)
-                                    return (
-                                      <div
-                                        key={value.id}
-                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm group border transition-colors ${
-                                          hasChildValues
-                                            ? 'bg-primary/5 border-primary/30 hover:bg-primary/10'
-                                            : depth === 0
-                                              ? 'bg-muted border-border hover:bg-muted/80'
-                                              : 'bg-white border-border hover:bg-muted/50'
-                                        }`}
-                                      >
-                                        <span className="font-medium">{value.value}</span>
-                                        {value.price > 0 && (
-                                          <span className="text-muted-foreground text-xs">
-                                            +₩{value.price.toLocaleString()}
-                                          </span>
-                                        )}
-                                        {hasChildren && (
-                                          <button
-                                            onClick={() => openValueMappingDialog(value, option)}
-                                            className={`ml-1 flex items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-colors ${
-                                              hasChildValues
-                                                ? 'bg-primary/20 text-primary hover:bg-primary/30'
-                                                : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                                            }`}
-                                            title="하위 값 연결 관리"
-                                          >
-                                            <Link2 className="h-3 w-3" />
-                                            {hasChildValues ? `${value.childValueIds?.length || 0}` : '연결'}
-                                          </button>
-                                        )}
-                                        <button
-                                          onClick={() =>
-                                            setDeleteTarget({
-                                              type: 'value',
-                                              id: value.id,
-                                              name: value.value,
-                                            })
-                                          }
-                                          className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-destructive/10 rounded"
-                                        >
-                                          <Trash2 className="h-3 w-3 text-destructive" />
-                                        </button>
+                                  {attr.previewType === 'TOGGLE_BUTTON' ? (
+                                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-md text-sm bg-blue-50 border border-blue-200">
+                                      <div className="w-8 h-4 bg-blue-500 rounded-full relative">
+                                        <div className="absolute right-0.5 top-0.5 w-3 h-3 bg-white rounded-full" />
                                       </div>
-                                    )
-                                  })}
-                                  {attr.values.length === 0 && (
-                                    <span className="text-sm text-muted-foreground italic">값이 없습니다</span>
+                                      <span className="text-blue-700">ON / OFF 토글</span>
+                                      <span className="text-xs text-muted-foreground ml-2">
+                                        (하위 속성은 ON일 때만 표시됨)
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      {attr.values.map((value) => {
+                                        const hasChildValues = value.hasChildValues || (value.childValueIds && value.childValueIds.length > 0)
+                                        return (
+                                          <div
+                                            key={value.id}
+                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm group border transition-colors ${
+                                              hasChildValues
+                                                ? 'bg-primary/5 border-primary/30 hover:bg-primary/10'
+                                                : depth === 0
+                                                  ? 'bg-muted border-border hover:bg-muted/80'
+                                                  : 'bg-white border-border hover:bg-muted/50'
+                                            }`}
+                                          >
+                                            <span className="font-medium">{value.value}</span>
+                                            {value.price > 0 && (
+                                              <span className="text-muted-foreground text-xs">
+                                                +₩{value.price.toLocaleString()}
+                                              </span>
+                                            )}
+                                            {hasChildren && (
+                                              <button
+                                                onClick={() => openValueMappingDialog(value, option)}
+                                                className={`ml-1 flex items-center gap-1 px-1.5 py-0.5 rounded text-xs transition-colors ${
+                                                  hasChildValues
+                                                    ? 'bg-primary/20 text-primary hover:bg-primary/30'
+                                                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                                }`}
+                                                title="하위 값 연결 관리"
+                                              >
+                                                <Link2 className="h-3 w-3" />
+                                                {hasChildValues ? `${value.childValueIds?.length || 0}` : '연결'}
+                                              </button>
+                                            )}
+                                            <button
+                                              onClick={() =>
+                                                setDeleteTarget({
+                                                  type: 'value',
+                                                  id: value.id,
+                                                  name: value.value,
+                                                })
+                                              }
+                                              className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-destructive/10 rounded"
+                                            >
+                                              <Trash2 className="h-3 w-3 text-destructive" />
+                                            </button>
+                                          </div>
+                                        )
+                                      })}
+                                      {attr.values.length === 0 && (
+                                        <span className="text-sm text-muted-foreground italic">값이 없습니다</span>
+                                      )}
+                                    </>
                                   )}
                                 </div>
                               </div>
@@ -810,6 +827,7 @@ export function OptionsPage() {
                   <SelectItem value="CHECK_BOX">체크박스</SelectItem>
                   <SelectItem value="INPUT_NUMBER">숫자 입력</SelectItem>
                   <SelectItem value="INPUT_TEXT">텍스트 입력</SelectItem>
+                  <SelectItem value="TOGGLE_BUTTON">토글 버튼</SelectItem>
                 </SelectContent>
               </Select>
             </div>

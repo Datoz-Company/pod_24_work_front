@@ -1,7 +1,7 @@
 import { useMemo, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { AttributeValueSelector } from './AttributeValueSelector'
+import { AttributeValueSelector, getToggleValueId } from './AttributeValueSelector'
 import { useOptionTrigger } from '@/hooks/useOptionTrigger'
 import type { ProductOption, WorkOrderOptionRequest, TriggerState, OptionAttribute } from '@/types/option'
 import { cn } from '@/lib/utils'
@@ -88,6 +88,13 @@ export function OptionSelector({
   const isParentValueSelected = useCallback(
     (_attribute: OptionAttribute, parentAttribute: OptionAttribute | undefined, selectedValueIds: number[]): boolean => {
       if (!parentAttribute) return true
+
+      // 부모가 TOGGLE_BUTTON인 경우 토글 상태 확인
+      if (parentAttribute.previewType === 'TOGGLE_BUTTON') {
+        const toggleValueId = getToggleValueId(parentAttribute.id)
+        return selectedValueIds.includes(toggleValueId)
+      }
+
       return parentAttribute.values.some((v) => selectedValueIds.includes(v.id))
     },
     []

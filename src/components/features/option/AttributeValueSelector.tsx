@@ -2,6 +2,7 @@ import { cn } from '@/lib/utils'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -10,6 +11,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { OptionAttribute, TriggerState } from '@/types/option'
+
+// TOGGLE_BUTTON의 가상 값 ID 생성 (음수 attribute.id 사용)
+export const getToggleValueId = (attributeId: number): number => -attributeId
+// 가상 값 ID에서 attribute ID 복원
+export const getAttributeIdFromToggleValue = (toggleValueId: number): number => -toggleValueId
+// 값 ID가 토글 가상 값인지 확인
+export const isToggleValueId = (valueId: number): boolean => valueId < 0
 
 interface AttributeValueSelectorProps {
   attribute: OptionAttribute
@@ -257,6 +265,62 @@ export function AttributeValueSelector({
           />
         </div>
       )
+
+    case 'TOGGLE_BUTTON': {
+      // TOGGLE_BUTTON은 값 없이 ON/OFF만 관리
+      // 가상 값 ID (음수 attribute.id)를 사용하여 ON 상태 표현
+      const toggleValueId = getToggleValueId(attribute.id)
+      const isToggleOn = selectedValueIds.includes(toggleValueId)
+
+      const handleToggle = (checked: boolean) => {
+        if (checked) {
+          // ON: 가상 값 ID 추가
+          onValueChange(attribute.id, [toggleValueId])
+        } else {
+          // OFF: 가상 값 ID 제거
+          onValueChange(attribute.id, [])
+        }
+      }
+
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="flex items-center gap-2">
+              {attribute.name}
+              {isChildAttribute && (
+                <Badge variant="outline" className="text-xs text-muted-foreground">
+                  자식 속성
+                </Badge>
+              )}
+            </Label>
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                'text-sm transition-colors',
+                isToggleOn ? 'text-muted-foreground' : 'text-foreground font-medium'
+              )}>
+                OFF
+              </span>
+              <Switch
+                checked={isToggleOn}
+                onCheckedChange={handleToggle}
+                disabled={disabled}
+              />
+              <span className={cn(
+                'text-sm transition-colors',
+                isToggleOn ? 'text-primary font-medium' : 'text-muted-foreground'
+              )}>
+                ON
+              </span>
+            </div>
+          </div>
+          {isToggleOn && (
+            <p className="text-xs text-muted-foreground">
+              하위 속성이 표시됩니다.
+            </p>
+          )}
+        </div>
+      )
+    }
 
     default:
       return null
