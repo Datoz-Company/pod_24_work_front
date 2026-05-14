@@ -2,6 +2,7 @@ import { cn } from '@/lib/utils'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -10,6 +11,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { OptionAttribute, TriggerState } from '@/types/option'
+
+// TOGGLE_BUTTON의 가상 값 ID 생성 (음수 attribute.id 사용)
+export const getToggleValueId = (attributeId: number): number => -attributeId
+// 가상 값 ID에서 attribute ID 복원
+export const getAttributeIdFromToggleValue = (toggleValueId: number): number => -toggleValueId
+// 값 ID가 토글 가상 값인지 확인
+export const isToggleValueId = (valueId: number): boolean => valueId < 0
 
 interface AttributeValueSelectorProps {
   attribute: OptionAttribute
@@ -21,6 +29,9 @@ interface AttributeValueSelectorProps {
   allowedChildValueIds?: number[] | null  // 부모 값에서 허용된 자식 값 ID 목록 (null이면 필터링 안함)
   parentAttributeName?: string            // 부모 속성 이름 (자식 속성인 경우)
   isParentValueSelected?: boolean         // 부모 값이 선택되었는지 여부
+  // INPUT_TEXT, INPUT_NUMBER용 props
+  inputValues?: Record<number, string>    // attributeId -> 입력값
+  onInputChange?: (attributeId: number, value: string) => void
 }
 
 export function AttributeValueSelector({
@@ -32,7 +43,12 @@ export function AttributeValueSelector({
   allowedChildValueIds = null,
   parentAttributeName,
   isParentValueSelected = true,
+  inputValues = {},
+  onInputChange,
 }: AttributeValueSelectorProps) {
+  // 값 없이 동작하는 타입들 (입력 필드, 토글 등)
+  const isValuelessType = ['INPUT_TEXT', 'INPUT_NUMBER', 'TOGGLE_BUTTON'].includes(attribute.previewType)
+
   // 기본 활성화된 값 필터링
   let enabledValues = attribute.values.filter((v) => v.isEnabled)
 
@@ -40,11 +56,11 @@ export function AttributeValueSelector({
   const isChildAttribute = attribute.isChildAttribute
   const hasAllowedFilter = allowedChildValueIds !== null
 
-  if (isChildAttribute && hasAllowedFilter) {
+  if (isChildAttribute && hasAllowedFilter && !isValuelessType) {
     enabledValues = enabledValues.filter((v) => allowedChildValueIds.includes(v.id))
   }
 
-  // 자식 속성인데 부모 값이 선택되지 않은 경우
+  // 자식 속성인데 부모 값이 선택되지 않은 경우 (TOGGLE_BUTTON 부모의 경우 토글 OFF)
   if (isChildAttribute && !isParentValueSelected) {
     return (
       <div className="space-y-2">
@@ -55,14 +71,14 @@ export function AttributeValueSelector({
           </Badge>
         </Label>
         <div className="p-3 border border-dashed rounded-md bg-muted/50 text-sm text-muted-foreground">
-          먼저 "{parentAttributeName || '부모 속성'}"의 값을 선택해주세요.
+          {parentAttributeName ? `"${parentAttributeName}"을(를) 활성화해주세요.` : '부모 속성을 먼저 선택해주세요.'}
         </div>
       </div>
     )
   }
 
-  // 자식 속성인데 연결된 자식 값이 없는 경우
-  if (isChildAttribute && hasAllowedFilter && enabledValues.length === 0) {
+  // 자식 속성인데 연결된 자식 값이 없는 경우 (값이 필요한 타입만 체크)
+  if (isChildAttribute && hasAllowedFilter && enabledValues.length === 0 && !isValuelessType) {
     return (
       <div className="space-y-2">
         <Label className="flex items-center gap-2">
@@ -113,13 +129,24 @@ export function AttributeValueSelector({
           </Label>
           <Select
             value={currentSelectedIds[0]?.toString() || ''}
-            onValueChange={handleSingleSelect}
+            onValueChange={(value) => {
+              // 'none' 선택 시 선택 해제
+              if (value === 'none') {
+                onValueChange(attribute.id, [])
+              } else {
+                handleSingleSelect(value)
+              }
+            }}
             disabled={disabled}
           >
             <SelectTrigger>
               <SelectValue placeholder={`${attribute.name} 선택`} />
             </SelectTrigger>
             <SelectContent>
+              {/* 선택 해제 옵션 */}
+              <SelectItem value="none" className="text-muted-foreground">
+                선택 안함
+              </SelectItem>
               {enabledValues.map((value) => {
                 const state = getValueState(value.id)
                 if (state === 'hidden') return null
@@ -163,7 +190,14 @@ export function AttributeValueSelector({
                 <button
                   key={value.id}
                   type="button"
-                  onClick={() => onValueChange(attribute.id, [value.id])}
+                  onClick={() => {
+                    // 이미 선택된 경우 선택 해제, 아니면 선택
+                    if (isSelected) {
+                      onValueChange(attribute.id, [])
+                    } else {
+                      onValueChange(attribute.id, [value.id])
+                    }
+                  }}
                   disabled={disabled || state === 'disabled'}
                   className={cn(
                     'px-3 py-2 rounded-md border text-sm transition-colors',
@@ -203,21 +237,27 @@ export function AttributeValueSelector({
               if (state === 'hidden') return null
               const isSelected = currentSelectedIds.includes(value.id)
               return (
-                <label
+                <button
                   key={value.id}
+                  type="button"
+                  onClick={() => handleMultiSelect(value.id, !isSelected)}
+                  disabled={disabled || state === 'disabled'}
                   className={cn(
                     'flex items-center gap-2 px-3 py-2 rounded-md border cursor-pointer transition-colors',
-                    isSelected ? 'border-primary bg-primary/10' : 'border-input',
+                    isSelected ? 'border-primary bg-primary/10' : 'border-input hover:bg-accent',
                     (disabled || state === 'disabled') && 'opacity-50 cursor-not-allowed'
                   )}
                 >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={(e) => handleMultiSelect(value.id, e.target.checked)}
-                    disabled={disabled || state === 'disabled'}
-                    className="h-4 w-4"
-                  />
+                  <div className={cn(
+                    'h-4 w-4 rounded border flex items-center justify-center',
+                    isSelected ? 'bg-primary border-primary' : 'border-input'
+                  )}>
+                    {isSelected && (
+                      <svg className="h-3 w-3 text-primary-foreground" viewBox="0 0 12 12" fill="none">
+                        <path d="M10 3L4.5 8.5L2 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </div>
                   <span className="text-sm">
                     {value.value}
                     {value.price > 0 && (
@@ -226,7 +266,7 @@ export function AttributeValueSelector({
                       </span>
                     )}
                   </span>
-                </label>
+                </button>
               )
             })}
           </div>
@@ -236,10 +276,19 @@ export function AttributeValueSelector({
     case 'INPUT_NUMBER':
       return (
         <div className="space-y-2">
-          <Label>{attribute.name}</Label>
+          <Label className="flex items-center gap-2">
+            {attribute.name}
+            {isChildAttribute && (
+              <Badge variant="outline" className="text-xs text-muted-foreground">
+                자식 속성
+              </Badge>
+            )}
+          </Label>
           <Input
             type="number"
             placeholder={`${attribute.name} 입력`}
+            value={inputValues[attribute.id] || ''}
+            onChange={(e) => onInputChange?.(attribute.id, e.target.value)}
             disabled={disabled}
             className="max-w-[200px]"
           />
@@ -249,14 +298,79 @@ export function AttributeValueSelector({
     case 'INPUT_TEXT':
       return (
         <div className="space-y-2">
-          <Label>{attribute.name}</Label>
+          <Label className="flex items-center gap-2">
+            {attribute.name}
+            {isChildAttribute && (
+              <Badge variant="outline" className="text-xs text-muted-foreground">
+                자식 속성
+              </Badge>
+            )}
+          </Label>
           <Input
             type="text"
             placeholder={`${attribute.name} 입력`}
+            value={inputValues[attribute.id] || ''}
+            onChange={(e) => onInputChange?.(attribute.id, e.target.value)}
             disabled={disabled}
           />
         </div>
       )
+
+    case 'TOGGLE_BUTTON': {
+      // TOGGLE_BUTTON은 값 없이 ON/OFF만 관리
+      // 가상 값 ID (음수 attribute.id)를 사용하여 ON 상태 표현
+      const toggleValueId = getToggleValueId(attribute.id)
+      const isToggleOn = selectedValueIds.includes(toggleValueId)
+
+      const handleToggle = (checked: boolean) => {
+        if (checked) {
+          // ON: 가상 값 ID 추가
+          onValueChange(attribute.id, [toggleValueId])
+        } else {
+          // OFF: 가상 값 ID 제거
+          onValueChange(attribute.id, [])
+        }
+      }
+
+      return (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label className="flex items-center gap-2">
+              {attribute.name}
+              {isChildAttribute && (
+                <Badge variant="outline" className="text-xs text-muted-foreground">
+                  자식 속성
+                </Badge>
+              )}
+            </Label>
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                'text-sm transition-colors',
+                isToggleOn ? 'text-muted-foreground' : 'text-foreground font-medium'
+              )}>
+                OFF
+              </span>
+              <Switch
+                checked={isToggleOn}
+                onCheckedChange={handleToggle}
+                disabled={disabled}
+              />
+              <span className={cn(
+                'text-sm transition-colors',
+                isToggleOn ? 'text-primary font-medium' : 'text-muted-foreground'
+              )}>
+                ON
+              </span>
+            </div>
+          </div>
+          {isToggleOn && (
+            <p className="text-xs text-muted-foreground">
+              하위 속성이 표시됩니다.
+            </p>
+          )}
+        </div>
+      )
+    }
 
     default:
       return null

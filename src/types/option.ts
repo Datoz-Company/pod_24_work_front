@@ -1,7 +1,7 @@
 // 옵션 관련 Enum 타입들
 export type OptionType = 'STANDARD' | 'ADDON' | 'CUSTOM'
 export type QuantityType = 'FIXED' | 'PER_UNIT' | 'RANGE'
-export type PreviewType = 'SELECT_BOX' | 'CHECK_BOX' | 'RADIO_BUTTON' | 'INPUT_NUMBER' | 'INPUT_TEXT'
+export type PreviewType = 'SELECT_BOX' | 'CHECK_BOX' | 'RADIO_BUTTON' | 'INPUT_NUMBER' | 'INPUT_TEXT' | 'TOGGLE_BUTTON'
 export type TriggerType = 'AND' | 'OR' | 'NAND' | 'NOR'
 export type TriggerVisibleType = 'HIDE' | 'DISABLE'
 
@@ -131,6 +131,7 @@ export interface ProductOptionUpdateRequest {
 export interface WorkOrderOptionRequest {
   optionId: number
   selectedAttributeValueIds: number[]
+  inputValues?: Record<number, string>  // attributeId -> 입력값 (INPUT_TEXT, INPUT_NUMBER용)
   optionCount?: number
 }
 

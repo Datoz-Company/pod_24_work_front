@@ -1,7 +1,7 @@
 import { useMemo, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { AttributeValueSelector } from './AttributeValueSelector'
+import { AttributeValueSelector, getToggleValueId } from './AttributeValueSelector'
 import { useOptionTrigger } from '@/hooks/useOptionTrigger'
 import type { ProductOption, WorkOrderOptionRequest, TriggerState, OptionAttribute } from '@/types/option'
 import { cn } from '@/lib/utils'
@@ -49,6 +49,13 @@ export function OptionSelector({
         return null // 계층 구조가 아니면 필터링 안함
       }
 
+      // 부모가 TOGGLE_BUTTON인 경우 토글 상태만 확인 (값 매핑 없음)
+      if (parentAttribute.previewType === 'TOGGLE_BUTTON') {
+        const toggleValueId = getToggleValueId(parentAttribute.id)
+        // 토글 ON이면 필터링 없이 모든 자식 값 표시
+        return selectedValueIds.includes(toggleValueId) ? null : []
+      }
+
       // 부모 속성에서 선택된 값 찾기
       const selectedParentValues = parentAttribute.values.filter(
         (v) => selectedValueIds.includes(v.id)
@@ -60,12 +67,20 @@ export function OptionSelector({
 
       // 선택된 부모 값들의 childValueIds 합집합
       const allowedIds = new Set<number>()
+      let hasAnyMapping = false // 하나라도 매핑이 있는지 확인
+
       for (const parentValue of selectedParentValues) {
-        if (parentValue.childValueIds) {
+        if (parentValue.childValueIds && parentValue.childValueIds.length > 0) {
+          hasAnyMapping = true
           for (const childId of parentValue.childValueIds) {
             allowedIds.add(childId)
           }
         }
+      }
+
+      // 선택된 부모 값들 중 어떤 것도 하위 값 연결이 없으면 필터링 없이 모든 자식 값 표시
+      if (!hasAnyMapping) {
+        return null
       }
 
       return Array.from(allowedIds)
@@ -88,6 +103,13 @@ export function OptionSelector({
   const isParentValueSelected = useCallback(
     (_attribute: OptionAttribute, parentAttribute: OptionAttribute | undefined, selectedValueIds: number[]): boolean => {
       if (!parentAttribute) return true
+
+      // 부모가 TOGGLE_BUTTON인 경우 토글 상태 확인
+      if (parentAttribute.previewType === 'TOGGLE_BUTTON') {
+        const toggleValueId = getToggleValueId(parentAttribute.id)
+        return selectedValueIds.includes(toggleValueId)
+      }
+
       return parentAttribute.values.some((v) => selectedValueIds.includes(v.id))
     },
     []
@@ -132,6 +154,38 @@ export function OptionSelector({
       }
     },
     [selectedOptions, productOptions, onOptionsChange]
+  )
+
+  // INPUT_TEXT, INPUT_NUMBER 입력값 변경 핸들러
+  const handleInputChange = useCallback(
+    (optionId: number, attributeId: number, value: string) => {
+      const existingOption = selectedOptions.find((opt) => opt.optionId === optionId)
+
+      if (existingOption) {
+        const updatedOption: WorkOrderOptionRequest = {
+          ...existingOption,
+          inputValues: {
+            ...existingOption.inputValues,
+            [attributeId]: value,
+          },
+        }
+
+        onOptionsChange(
+          selectedOptions.map((opt) =>
+            opt.optionId === optionId ? updatedOption : opt
+          )
+        )
+      } else {
+        const newOption: WorkOrderOptionRequest = {
+          optionId,
+          selectedAttributeValueIds: [],
+          inputValues: { [attributeId]: value },
+          optionCount: 1,
+        }
+        onOptionsChange([...selectedOptions, newOption])
+      }
+    },
+    [selectedOptions, onOptionsChange]
   )
 
   // 선택된 옵션의 총 추가 금액 계산
@@ -232,6 +286,11 @@ export function OptionSelector({
                     allowedChildValueIds={allowedChildValueIds}
                     parentAttributeName={parentAttribute?.name}
                     isParentValueSelected={parentValueSelected}
+                    // INPUT_TEXT, INPUT_NUMBER용 props
+                    inputValues={currentSelection?.inputValues || {}}
+                    onInputChange={(attrId, value) =>
+                      handleInputChange(option.id, attrId, value)
+                    }
                   />
                 )
               })}
