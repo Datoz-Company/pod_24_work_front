@@ -390,43 +390,76 @@ export function WorkOrderPeekPanel({
                               (attr: {
                                 attributeId: number
                                 attributeName: string
-                                selectedValues: {
+                                previewType?: string
+                                selectedValues?: {
                                   valueId: number
                                   value: string
                                   price: number
                                 }[]
-                              }) => (
-                                <div
-                                  key={attr.attributeId}
-                                  className="flex items-start gap-2 text-xs"
-                                >
-                                  <span className="text-muted-foreground min-w-[60px]">
-                                    {attr.attributeName}:
-                                  </span>
-                                  <div className="flex flex-wrap gap-1">
-                                    {attr.selectedValues?.map(
-                                      (val: {
-                                        valueId: number
-                                        value: string
-                                        price: number
-                                      }) => (
-                                        <Badge
-                                          key={val.valueId}
-                                          variant="secondary"
-                                          className="text-xs font-normal"
-                                        >
-                                          {val.value}
-                                          {val.price > 0 && (
-                                            <span className="ml-1 text-muted-foreground">
-                                              +₩{val.price.toLocaleString()}
-                                            </span>
-                                          )}
+                                inputValue?: string
+                                isToggleOn?: boolean
+                              }) => {
+                                // 표시할 값이 없는 경우 (빈 선택, 빈 입력, 토글 OFF) 건너뛰기
+                                const hasSelectedValues = attr.selectedValues && attr.selectedValues.length > 0
+                                const hasInputValue = attr.inputValue && attr.inputValue.trim() !== ''
+                                const isToggleOn = attr.isToggleOn === true
+
+                                // TOGGLE_BUTTON이 OFF인 경우 표시하지 않음
+                                if (attr.previewType === 'TOGGLE_BUTTON' && !isToggleOn) {
+                                  return null
+                                }
+
+                                // 선택된 값도 없고, 입력값도 없으면 건너뛰기
+                                if (!hasSelectedValues && !hasInputValue && attr.previewType !== 'TOGGLE_BUTTON') {
+                                  return null
+                                }
+
+                                return (
+                                  <div
+                                    key={attr.attributeId}
+                                    className="flex items-start gap-2 text-xs"
+                                  >
+                                    <span className="text-muted-foreground min-w-[60px]">
+                                      {attr.attributeName}:
+                                    </span>
+                                    <div className="flex flex-wrap gap-1">
+                                      {/* TOGGLE_BUTTON: ON 상태 표시 */}
+                                      {attr.previewType === 'TOGGLE_BUTTON' && isToggleOn && (
+                                        <Badge variant="default" className="text-xs font-normal">
+                                          ON
                                         </Badge>
-                                      )
-                                    )}
+                                      )}
+                                      {/* INPUT_TEXT, INPUT_NUMBER: 입력값 표시 */}
+                                      {(attr.previewType === 'INPUT_TEXT' || attr.previewType === 'INPUT_NUMBER') && hasInputValue && (
+                                        <Badge variant="secondary" className="text-xs font-normal">
+                                          {attr.inputValue}
+                                        </Badge>
+                                      )}
+                                      {/* 일반 선택값 표시 (SELECT_BOX, RADIO_BUTTON, CHECK_BOX) */}
+                                      {hasSelectedValues && attr.selectedValues?.map(
+                                        (val: {
+                                          valueId: number
+                                          value: string
+                                          price: number
+                                        }) => (
+                                          <Badge
+                                            key={val.valueId}
+                                            variant="secondary"
+                                            className="text-xs font-normal"
+                                          >
+                                            {val.value}
+                                            {val.price > 0 && (
+                                              <span className="ml-1 text-muted-foreground">
+                                                +₩{val.price.toLocaleString()}
+                                              </span>
+                                            )}
+                                          </Badge>
+                                        )
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              )
+                                )
+                              }
                             )}
                           </div>
                         )}

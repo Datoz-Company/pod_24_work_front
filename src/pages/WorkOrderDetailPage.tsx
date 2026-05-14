@@ -523,15 +523,35 @@ export function WorkOrderDetailPage() {
                       (attr: {
                         attributeId: number
                         attributeName: string
-                        selectedValues: { valueId: number; value: string }[]
-                      }) => (
-                        <React.Fragment key={`${option.id}-${attr.attributeId}`}>
-                          <span className="text-muted-foreground">{attr.attributeName}</span>
-                          <span>
-                            {attr.selectedValues?.map(v => v.value).join(', ')}
-                          </span>
-                        </React.Fragment>
-                      )
+                        previewType?: string
+                        selectedValues?: { valueId: number; value: string }[]
+                        inputValue?: string
+                        isToggleOn?: boolean
+                      }) => {
+                        // 표시할 값 결정
+                        let displayValue: string | null = null
+
+                        if (attr.previewType === 'TOGGLE_BUTTON') {
+                          // 토글이 OFF이면 표시하지 않음
+                          if (!attr.isToggleOn) return null
+                          displayValue = 'ON'
+                        } else if (attr.previewType === 'INPUT_TEXT' || attr.previewType === 'INPUT_NUMBER') {
+                          // 입력값이 비어있으면 표시하지 않음
+                          if (!attr.inputValue || attr.inputValue.trim() === '') return null
+                          displayValue = attr.inputValue
+                        } else {
+                          // 일반 선택값
+                          if (!attr.selectedValues || attr.selectedValues.length === 0) return null
+                          displayValue = attr.selectedValues.map(v => v.value).join(', ')
+                        }
+
+                        return (
+                          <React.Fragment key={`${option.id}-${attr.attributeId}`}>
+                            <span className="text-muted-foreground">{attr.attributeName}</span>
+                            <span>{displayValue}</span>
+                          </React.Fragment>
+                        )
+                      }
                     )
                   })}
                 </div>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { format } from 'date-fns'
@@ -7,6 +7,22 @@ import { ChevronUp, ChevronDown, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CompletedProcessMiniCard } from './CompletedProcessMiniCard'
 import type { KanbanCard as KanbanCardType } from '@/types'
+
+// 칸반 카드 확장 상태 캐싱
+const KANBAN_EXPANDED_KEY = 'kanban-expanded-cards'
+
+const getExpandedCards = (): Set<string> => {
+  try {
+    const saved = localStorage.getItem(KANBAN_EXPANDED_KEY)
+    return saved ? new Set(JSON.parse(saved)) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
+const saveExpandedCards = (expandedSet: Set<string>) => {
+  localStorage.setItem(KANBAN_EXPANDED_KEY, JSON.stringify([...expandedSet]))
+}
 
 // 상태 색상 정의
 const STATUS_COLORS = {
@@ -54,7 +70,29 @@ interface KanbanCardProps {
 }
 
 export function KanbanCard({ card, onClick }: KanbanCardProps) {
-  const [isExpanded, setIsExpanded] = useState(true)
+  // 카드 고유 ID 생성
+  const cardId = `${card.workOrderId}-${card.workOrderProcessId ?? 'completed'}`
+
+  // 캐시된 상태 또는 기본값(닫힘)으로 초기화
+  const [isExpanded, setIsExpanded] = useState(() => {
+    return getExpandedCards().has(cardId)
+  })
+
+  // 확장 상태 토글 시 캐시 업데이트
+  const handleToggleExpand = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    setIsExpanded(prev => {
+      const newValue = !prev
+      const expandedSet = getExpandedCards()
+      if (newValue) {
+        expandedSet.add(cardId)
+      } else {
+        expandedSet.delete(cardId)
+      }
+      saveExpandedCards(expandedSet)
+      return newValue
+    })
+  }, [cardId])
 
   // 작업 완료 컬럼의 카드 (completedProcessInfos가 있는 경우)
   const isCompletedColumnCard = card.completedProcessInfos != null && card.completedProcessInfos.length >= 0
@@ -83,11 +121,6 @@ export function KanbanCard({ card, onClick }: KanbanCardProps) {
     if (!isDragging) {
       onClick?.()
     }
-  }
-
-  const handleToggle = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    setIsExpanded(!isExpanded)
   }
 
   const statusDotColor = getStatusDotColor(card, isCompletedColumnCard)
@@ -122,7 +155,7 @@ export function KanbanCard({ card, onClick }: KanbanCardProps) {
               style={{ backgroundColor: statusDotColor }}
             />
             <button
-              onClick={handleToggle}
+              onClick={handleToggleExpand}
               className="p-1 hover:bg-gray-100 rounded transition-colors"
             >
               {isExpanded ? (
@@ -138,10 +171,6 @@ export function KanbanCard({ card, onClick }: KanbanCardProps) {
         {isExpanded && (
           <div className="px-3 pb-3 pt-2">
             <div className="text-xs text-gray-500 space-y-1">
-              <div className="flex justify-between gap-2">
-                <span className="flex-shrink-0">작업번호</span>
-                <span className="text-gray-700 truncate">{card.orderNumber}</span>
-              </div>
               {card.customerName && (
                 <div className="flex justify-between gap-2">
                   <span className="flex-shrink-0">고객</span>
@@ -221,7 +250,7 @@ export function KanbanCard({ card, onClick }: KanbanCardProps) {
             style={{ backgroundColor: statusDotColor }}
           />
           <button
-            onClick={handleToggle}
+            onClick={handleToggleExpand}
             className="p-1 hover:bg-gray-100 rounded transition-colors"
           >
             {isExpanded ? (
@@ -237,10 +266,6 @@ export function KanbanCard({ card, onClick }: KanbanCardProps) {
       {isExpanded && (
         <div className="px-3 pb-3 pt-2">
           <div className="text-xs text-gray-500 space-y-1">
-            <div className="flex justify-between gap-2">
-              <span className="flex-shrink-0">작업번호</span>
-              <span className="text-gray-700 truncate">{card.orderNumber}</span>
-            </div>
             {card.customerName && (
               <div className="flex justify-between gap-2">
                 <span className="flex-shrink-0">고객</span>
