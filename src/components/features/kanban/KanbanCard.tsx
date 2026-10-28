@@ -64,6 +64,42 @@ const getStatusDotColor = (card: KanbanCardType, isCompletedColumnCard: boolean)
   }
 }
 
+// 상호명 우선, 없으면 고객명으로 대체
+const getDisplayName = (card: KanbanCardType): string =>
+  card.clientName || card.customerName || '상호 미지정'
+
+// 품명(작업명)이 상품명과 다를 때만 함께 표시
+const getProductLabel = (card: KanbanCardType): string => {
+  if (!card.productName) return card.orderName
+  if (card.orderName && card.orderName !== card.productName) {
+    return `${card.productName} · ${card.orderName}`
+  }
+  return card.productName
+}
+
+// 카드 요약: 상호명 / 상품명 / 출고 날짜 (수량·가격은 표시하지 않음)
+function CardSummary({ card, statusDotColor, trailing }: {
+  card: KanbanCardType
+  statusDotColor: string
+  trailing?: React.ReactNode
+}) {
+  return (
+    <div className="p-3 space-y-1">
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="font-semibold text-sm text-gray-900 truncate flex-1 min-w-0">{getDisplayName(card)}</h4>
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: statusDotColor }} />
+          {trailing}
+        </div>
+      </div>
+      <p className="text-xs text-gray-700 truncate">{getProductLabel(card)}</p>
+      <p className="text-xs text-gray-500">
+        출고 {card.dueDate ? format(new Date(card.dueDate), 'yyyy-MM-dd (EEE)', { locale: ko }) : '미정'}
+      </p>
+    </div>
+  )
+}
+
 interface KanbanCardProps {
   card: KanbanCardType
   onClick?: () => void
@@ -142,21 +178,14 @@ export function KanbanCard({ card, onClick }: KanbanCardProps) {
           </div>
         )}
 
-        {/* 카드 헤더 */}
-        <div className={cn(
-          "flex items-center justify-between gap-2 p-3",
-          isExpanded && "pb-0"
-        )}>
-          <h4 className="font-semibold text-sm text-gray-900 truncate flex-1 min-w-0">{card.orderName}</h4>
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            {/* 상태 dot */}
-            <div
-              className="w-2.5 h-2.5 rounded-full"
-              style={{ backgroundColor: statusDotColor }}
-            />
+        <CardSummary
+          card={card}
+          statusDotColor={statusDotColor}
+          trailing={
             <button
               onClick={handleToggleExpand}
               className="p-1 hover:bg-gray-100 rounded transition-colors"
+              aria-label={isExpanded ? '완료된 공정 접기' : '완료된 공정 펼치기'}
             >
               {isExpanded ? (
                 <ChevronUp className="h-4 w-4 text-gray-400" />
@@ -164,36 +193,14 @@ export function KanbanCard({ card, onClick }: KanbanCardProps) {
                 <ChevronDown className="h-4 w-4 text-gray-400" />
               )}
             </button>
-          </div>
-        </div>
+          }
+        />
 
-        {/* 카드 내용 */}
         {isExpanded && (
-          <div className="px-3 pb-3 pt-2">
-            <div className="text-xs text-gray-500 space-y-1">
-              {card.customerName && (
-                <div className="flex justify-between gap-2">
-                  <span className="flex-shrink-0">고객</span>
-                  <span className="text-gray-700 truncate">{card.customerName}</span>
-                </div>
-              )}
-              {card.dueDate && (
-                <div className="flex justify-between gap-2">
-                  <span className="flex-shrink-0">출고일</span>
-                  <span className="text-gray-700">
-                    {format(new Date(card.dueDate), 'yyyy-MM-dd', { locale: ko })}
-                  </span>
-                </div>
-              )}
-              <div className="flex justify-between gap-2">
-                <span className="flex-shrink-0">수량</span>
-                <span className="text-gray-700">{card.quantity}개</span>
-              </div>
-            </div>
-
+          <div className="px-3 pb-3">
             {/* 완료된 공정 미니 카드 리스트 */}
             {card.completedProcessInfos && card.completedProcessInfos.length > 0 && (
-              <div className="mt-3 pt-2 border-t border-gray-100">
+              <div className="pt-2 border-t border-gray-100">
                 <div className="text-xs text-gray-500 mb-2">
                   완료된 공정 ({card.completedProcessInfos.length})
                 </div>
@@ -237,56 +244,7 @@ export function KanbanCard({ card, onClick }: KanbanCardProps) {
         </div>
       )}
 
-      {/* 카드 헤더 */}
-      <div className={cn(
-        "flex items-center justify-between gap-2 p-3",
-        isExpanded && "pb-0"
-      )}>
-        <h4 className="font-semibold text-sm text-gray-900 truncate flex-1 min-w-0">{card.orderName}</h4>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          {/* 상태 dot */}
-          <div
-            className="w-2.5 h-2.5 rounded-full"
-            style={{ backgroundColor: statusDotColor }}
-          />
-          <button
-            onClick={handleToggleExpand}
-            className="p-1 hover:bg-gray-100 rounded transition-colors"
-          >
-            {isExpanded ? (
-              <ChevronUp className="h-4 w-4 text-gray-400" />
-            ) : (
-              <ChevronDown className="h-4 w-4 text-gray-400" />
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* 카드 내용 */}
-      {isExpanded && (
-        <div className="px-3 pb-3 pt-2">
-          <div className="text-xs text-gray-500 space-y-1">
-            {card.customerName && (
-              <div className="flex justify-between gap-2">
-                <span className="flex-shrink-0">고객</span>
-                <span className="text-gray-700 truncate">{card.customerName}</span>
-              </div>
-            )}
-            {card.dueDate && (
-              <div className="flex justify-between gap-2">
-                <span className="flex-shrink-0">출고일</span>
-                <span className="text-gray-700">
-                  {format(new Date(card.dueDate), 'yyyy-MM-dd', { locale: ko })}
-                </span>
-              </div>
-            )}
-            <div className="flex justify-between gap-2">
-              <span className="flex-shrink-0">수량</span>
-              <span className="text-gray-700">{card.quantity}개</span>
-            </div>
-          </div>
-        </div>
-      )}
+      <CardSummary card={card} statusDotColor={statusDotColor} />
     </div>
   )
 }

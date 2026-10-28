@@ -154,6 +154,24 @@ export function OptionsPage() {
     },
   })
 
+  // 값의 "직접 입력 허용" 토글 (예: 별도 사이즈 → 입력란 표시)
+  // 서버 수정 API가 이미지/트리거 필드를 그대로 덮어쓰므로 기존 값을 함께 보냄
+  const toggleCustomInputMutation = useMutation({
+    mutationFn: (value: OptionAttributeValue) =>
+      optionService.updateAttributeValue(value.id, {
+        value: value.value,
+        imageUrl: value.imageUrl,
+        price: value.price,
+        isEnabled: value.isEnabled,
+        triggerAttributeValueIds: value.triggerAttributeValueIds,
+        triggerVisibleType: value.triggerVisibleType,
+        allowCustomInput: !value.allowCustomInput,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['options'] })
+    },
+  })
+
   const deleteValueMutation = useMutation({
     mutationFn: optionService.deleteAttributeValue,
     onSuccess: () => {
@@ -648,6 +666,19 @@ export function OptionsPage() {
                                             }`}
                                           >
                                             <span className="font-medium">{value.value}</span>
+                                            <button
+                                              type="button"
+                                              onClick={() => toggleCustomInputMutation.mutate(value)}
+                                              className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 text-xs transition-colors ${
+                                                value.allowCustomInput
+                                                  ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                                                  : 'text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-muted'
+                                              }`}
+                                              title="선택 시 텍스트 직접 입력란 표시 (예: 별도 사이즈)"
+                                            >
+                                              <Pencil className="h-3 w-3" />
+                                              직접입력
+                                            </button>
                                             {value.price > 0 && (
                                               <span className="text-muted-foreground text-xs">
                                                 +₩{value.price.toLocaleString()}
@@ -879,6 +910,17 @@ export function OptionsPage() {
                 onChange={(e) => setValueForm({ ...valueForm, price: Number(e.target.value) })}
                 placeholder="0"
               />
+            </div>
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="value-allow-custom-input"
+                checked={!!valueForm.allowCustomInput}
+                onCheckedChange={(checked) => setValueForm({ ...valueForm, allowCustomInput: checked === true })}
+              />
+              <div className="space-y-0.5">
+                <Label htmlFor="value-allow-custom-input">직접 입력 허용</Label>
+                <p className="text-xs text-muted-foreground">이 값을 고르면 텍스트 입력란이 나타납니다. 예: "별도 사이즈" → 300 x 450 mm</p>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>이미지 URL (선택)</Label>

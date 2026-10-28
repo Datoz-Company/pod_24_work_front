@@ -114,6 +114,21 @@ export function AttributeValueSelector({
     }
   }
 
+  // 직접 입력 허용 값(예: "별도 사이즈")이 선택되면 입력란 표시 — 값은 inputValues[attributeId]에 저장
+  const customInputValue = enabledValues.find(
+    (value) => value.allowCustomInput && currentSelectedIds.includes(value.id)
+  )
+  const customInputField = customInputValue ? (
+    <Input
+      id={`custom-input-${attribute.id}`}
+      className="mt-2"
+      placeholder={`${customInputValue.value} 내용을 입력하세요 (예: 300 x 450 mm)`}
+      value={inputValues[attribute.id] || ''}
+      onChange={(e) => onInputChange?.(attribute.id, e.target.value)}
+      disabled={disabled}
+    />
+  ) : null
+
   // PreviewType에 따른 렌더링
   switch (attribute.previewType) {
     case 'SELECT_BOX':
@@ -167,6 +182,7 @@ export function AttributeValueSelector({
               })}
             </SelectContent>
           </Select>
+          {customInputField}
         </div>
       )
 
@@ -217,6 +233,7 @@ export function AttributeValueSelector({
               )
             })}
           </div>
+          {customInputField}
         </div>
       )
 
@@ -270,6 +287,7 @@ export function AttributeValueSelector({
               )
             })}
           </div>
+          {customInputField}
         </div>
       )
 

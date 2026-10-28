@@ -15,6 +15,8 @@ import {
   Mail,
   MapPin,
   Clock,
+  Truck,
+  FileSpreadsheet,
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -41,7 +43,9 @@ import { orderService } from '@/services/orderService'
 import { AddWorkOrderDialog } from '@/components/features/order/AddWorkOrderDialog'
 import { KanbanBoard } from '@/components/features/kanban/KanbanBoard'
 import { cn } from '@/lib/utils'
-import type { OrderStatus } from '@/types'
+import { ORDER_SOURCE_LABELS, SHIPPING_METHOD_LABELS, type OrderStatus } from '@/types'
+import { OrderFilesPanel } from '@/components/features/order/OrderFilesPanel'
+import { excelService } from '@/services/excelService'
 import { toast } from 'sonner'
 
 const statusConfig: Record<
@@ -60,7 +64,7 @@ export function OrderDetailPage() {
   const queryClient = useQueryClient()
   const [isAddWorkOrderOpen, setIsAddWorkOrderOpen] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [activeTab, setActiveTab] = useState('work')
+  const [activeTab, setActiveTab] = useState('info')
 
   const orderId = Number(id)
 
@@ -160,9 +164,16 @@ export function OrderDetailPage() {
                 <span>|</span>
               </>
             )}
+            {order.clientCompany && (
+              <>
+                <span>회사</span>
+                <span className="text-foreground">{order.clientCompany.displayName}</span>
+                <span>|</span>
+              </>
+            )}
             {order.customer && (
               <>
-                <span>고객명</span>
+                <span>주문자</span>
                 <span className="text-foreground">{order.customer.name}</span>
               </>
             )}
@@ -182,7 +193,17 @@ export function OrderDetailPage() {
                 <Plus className="mr-2 h-4 w-4" />
                 작업 추가
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() =>
+                  excelService
+                    .orderWorkInstructions(order.id, order.orderNumber)
+                    .catch(() => toast.error('작업 지시서 생성에 실패했습니다. 주문에 작업이 있는지 확인하세요.'))
+                }
+              >
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                작업 지시서 엑셀
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate(`/orders/${orderId}/edit`)}>
                 <Edit className="mr-2 h-4 w-4" />
                 주문 수정
               </DropdownMenuItem>
@@ -195,7 +216,7 @@ export function OrderDetailPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button size="sm">
+          <Button size="sm" onClick={() => navigate(`/orders/${orderId}/edit`)}>
             <Edit className="mr-1 h-4 w-4" />
             주문 수정
           </Button>
@@ -272,9 +293,15 @@ export function OrderDetailPage() {
                     <span className="text-muted-foreground">주문번호</span>
                     <span className="font-mono">{order.orderNumber}</span>
 
+                    <span className="text-muted-foreground">회사 / 상호</span>
+                    <span>{order.clientCompany?.displayName ?? '-'}</span>
+
+                    <span className="text-muted-foreground">주문 경로</span>
+                    <span>{order.orderSource ? ORDER_SOURCE_LABELS[order.orderSource] : '-'}</span>
+
                     {order.customer && (
                       <>
-                        <span className="text-muted-foreground">고객명</span>
+                        <span className="text-muted-foreground">주문자</span>
                         <Link to={`/customers/${order.customer.id}`} className="text-primary hover:underline inline-flex items-center gap-1">
                           {order.customer.name}
                           <ExternalLink className="h-3 w-3" />
@@ -324,6 +351,63 @@ export function OrderDetailPage() {
                   </CardContent>
                 </Card>
               )}
+
+              {/* 출고 · 배송 */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <Truck className="h-4 w-4" />
+                    출고 · 배송
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-[100px_1fr] gap-y-3 text-sm">
+                    <span className="text-muted-foreground">출고 방식</span>
+                    <span className="font-medium">{order.shippingMethod ? SHIPPING_METHOD_LABELS[order.shippingMethod] : '-'}</span>
+
+                    <span className="text-muted-foreground">수취인</span>
+                    <span>
+                      {[order.shippingInfo?.recipientName, order.shippingInfo?.recipientPhone].filter(Boolean).join(' · ') || '-'}
+                    </span>
+
+                    <span className="text-muted-foreground">배송지</span>
+                    <span className="whitespace-pre-wrap">
+                      {[
+                        order.shippingInfo?.zipCode && `(${order.shippingInfo.zipCode})`,
+                        order.shippingInfo?.address,
+                        order.shippingInfo?.addressDetail,
+                      ].filter(Boolean).join(' ') || '-'}
+                    </span>
+
+                    {order.shippingInfo?.deliveryMessage && (
+                      <>
+                        <span className="text-muted-foreground">배송 메시지</span>
+                        <span className="whitespace-pre-wrap">{order.shippingInfo.deliveryMessage}</span>
+                      </>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* 파일: 견적서(관리자) / 주문·디자인 파일 */}
+              <OrderFilesPanel
+                orderId={order.id}
+                clientCompanyId={order.clientCompany?.id}
+                quoteAction={
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      excelService
+                        .quote(order.id, order.orderNumber)
+                        .catch(() => toast.error('견적서 생성에 실패했습니다'))
+                    }
+                  >
+                    <FileSpreadsheet className="mr-1 h-4 w-4" />
+                    견적서 자동 생성
+                  </Button>
+                }
+              />
 
               {/* 상태 변경 */}
               <Card>
