@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { User, Lock, Building2, Users, Plus, UserMinus, UserCheck, Mail, Phone, MapPin } from 'lucide-react';
 
@@ -414,6 +415,14 @@ function CompanyTab() {
   );
 }
 
+// 역할: 관리자(대표·디자인실장)만 견적서 열람 가능
+const ROLE_OPTIONS = [
+  { value: 'COMPANY_ADMIN', label: '관리자', description: '모든 기능 + 견적서 열람, 팀원 관리' },
+  { value: 'COMPANY_MANAGER', label: '직원', description: '주문·작업 관리 (견적서 비공개)' },
+];
+
+const getRoleLabel = (role: string) => ROLE_OPTIONS.find((option) => option.value === role)?.label ?? role;
+
 // 팀 관리 탭
 function TeamTab() {
   const queryClient = useQueryClient();
@@ -445,6 +454,18 @@ function TeamTab() {
     },
     onError: (error: any) => {
       const message = error.response?.data?.message || '팀원 추가에 실패했습니다';
+      toast.error(message);
+    },
+  });
+
+  const roleMutation = useMutation({
+    mutationFn: ({ memberId, role }: { memberId: number; role: string }) => companyApi.updateMemberRole(memberId, role),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team-members'] });
+      toast.success('역할을 변경했습니다');
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.message || '역할 변경에 실패했습니다';
       toast.error(message);
     },
   });
@@ -557,6 +578,21 @@ function TeamTab() {
                   placeholder="이메일 주소 (선택)"
                 />
               </div>
+              <div className="space-y-2">
+                <Label>역할 *</Label>
+                <Select value={inviteData.role} onValueChange={(role) => setInviteData({ ...inviteData, role })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROLE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label} · <span className="text-muted-foreground">{option.description}</span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsInviteOpen(false)}>
                   취소
@@ -606,6 +642,27 @@ function TeamTab() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  {/* 역할: 자기 자신·비활성 팀원은 변경 불가 */}
+                  {isCurrentUser(member.username) || !member.isActive ? (
+                    <Badge variant="secondary">{getRoleLabel(member.role)}</Badge>
+                  ) : (
+                    <Select
+                      value={member.role}
+                      onValueChange={(role) => roleMutation.mutate({ memberId: member.id, role })}
+                      disabled={roleMutation.isPending}
+                    >
+                      <SelectTrigger className="h-8 w-24 text-xs" aria-label={`${member.name} 역할`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ROLE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                   {/* 자기 자신은 비활성화/활성화 버튼 숨김 */}
                   {!isCurrentUser(member.username) && (
                     member.isActive ? (

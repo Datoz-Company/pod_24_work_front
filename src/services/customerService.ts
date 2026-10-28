@@ -1,5 +1,5 @@
 import api from './api'
-import type { ApiResponse, Customer, CustomerCreateRequest, PageResponse, WorkOrder } from '@/types'
+import type { ApiResponse, Customer, CustomerCreateRequest, PageResponse, ShippingInfo, WorkOrder } from '@/types'
 
 export const customerService = {
   getAll: async (): Promise<Customer[]> => {
@@ -37,6 +37,12 @@ export const customerService = {
     const response = await api.get<ApiResponse<PageResponse<WorkOrder>>>(
       `/customers/${customerId}/work-orders?page=${page}&size=${size}`
     )
+    return response.data.data
+  },
+
+  // 과거 주문의 배송지 목록 (배송지 불러오기)
+  getShippingAddresses: async (customerId: number): Promise<ShippingInfo[]> => {
+    const response = await api.get<ApiResponse<ShippingInfo[]>>(`/customers/${customerId}/shipping-addresses`)
     return response.data.data
   },
 }

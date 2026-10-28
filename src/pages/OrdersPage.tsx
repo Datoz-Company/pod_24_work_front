@@ -27,7 +27,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { orderService } from '@/services/orderService'
-import { CreateOrderDialog } from '@/components/features/order/CreateOrderDialog'
 import type { OrderStatus } from '@/types'
 import { format } from 'date-fns'
 import { ko } from 'date-fns/locale'
@@ -43,7 +42,6 @@ const statusConfig: Record<OrderStatus, { label: string; variant: 'default' | 's
 export function OrdersPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [page, setPage] = useState(0)
@@ -78,7 +76,8 @@ export function OrdersPage() {
     const matchesSearch =
       order.orderName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      order.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+      order.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.clientCompany?.displayName?.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter
     return matchesSearch && matchesStatus
   }) || []
@@ -87,7 +86,7 @@ export function OrdersPage() {
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b bg-white px-6 py-4">
         <h1 className="text-2xl font-bold">주문 관리</h1>
-        <Button onClick={() => setIsCreateDialogOpen(true)}>
+        <Button onClick={() => navigate('/orders/new')}>
           <Plus className="mr-2 h-4 w-4" />
           새 주문 등록
         </Button>
@@ -125,7 +124,7 @@ export function OrdersPage() {
               <TableRow>
                 <TableHead className="w-32">주문번호</TableHead>
                 <TableHead>주문명</TableHead>
-                <TableHead className="w-28">고객</TableHead>
+                <TableHead className="w-40">회사 / 주문자</TableHead>
                 <TableHead className="w-24 text-center">작업현황</TableHead>
                 <TableHead className="w-24 text-center">상태</TableHead>
                 <TableHead className="w-28">주문일</TableHead>
@@ -155,7 +154,10 @@ export function OrdersPage() {
                   >
                     <TableCell className="font-mono text-sm">{order.orderNumber}</TableCell>
                     <TableCell className="font-medium">{order.orderName}</TableCell>
-                    <TableCell>{order.customer?.name || '-'}</TableCell>
+                    <TableCell>
+                      <div className="truncate">{order.clientCompany?.displayName || '-'}</div>
+                      {order.customer && <div className="truncate text-xs text-muted-foreground">{order.customer.name}</div>}
+                    </TableCell>
                     <TableCell className="text-center">
                       <span className="text-sm">
                         {order.completedCount}/{order.workOrderCount}
@@ -237,11 +239,6 @@ export function OrdersPage() {
           </div>
         )}
       </div>
-
-      <CreateOrderDialog
-        open={isCreateDialogOpen}
-        onOpenChange={setIsCreateDialogOpen}
-      />
     </div>
   )
 }

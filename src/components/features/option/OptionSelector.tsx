@@ -129,7 +129,11 @@ export function OptionSelector({
             const attribute = productOption?.option?.attributes.find(
               (attr) => attr.id === attributeId
             )
-            return !attribute?.values.some((v) => v.id === id)
+            if (!attribute) return true
+            // TOGGLE_BUTTON 가상 값 ID 체크 (음수 attribute.id)
+            if (id === getToggleValueId(attribute.id)) return false
+            // 일반 값 체크
+            return !attribute.values.some((v) => v.id === id)
           }
         )
 

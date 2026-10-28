@@ -10,7 +10,6 @@ import {
   User,
   Calendar,
   Hash,
-  FileText,
   Loader2,
   AlertTriangle,
   Paperclip,
@@ -46,6 +45,7 @@ import { kanbanService } from '@/services/kanbanService'
 import { attachmentService } from '@/services/attachmentService'
 import { FileUploader } from '@/components/features/attachment/FileUploader'
 import { AttachmentList } from '@/components/features/attachment/AttachmentList'
+import { WorkOrderMemoEditor } from './WorkOrderMemoEditor'
 import type { ProcessStatus } from '@/types'
 
 interface WorkOrderPeekPanelProps {
@@ -58,14 +58,14 @@ const statusConfig: Record<
   string,
   { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }
 > = {
-  PENDING: { label: '작업 전', variant: 'secondary' },
+  PENDING: { label: '대기중', variant: 'secondary' },
   IN_PROGRESS: { label: '작업 중', variant: 'default' },
   COMPLETED: { label: '완료', variant: 'outline' },
   REJECTED: { label: '반려', variant: 'destructive' },
 }
 
 const processStatusConfig: Record<ProcessStatus, { label: string; color: string }> = {
-  NOT_STARTED: { label: '작업 전', color: 'bg-gray-100 text-gray-600' },
+  NOT_STARTED: { label: '미착수', color: 'bg-gray-100 text-gray-600' },
   IN_PROGRESS: { label: '작업 중', color: 'bg-blue-100 text-blue-700' },
   COMPLETED: { label: '작업 완료', color: 'bg-green-100 text-green-700' },
 }
@@ -264,17 +264,15 @@ export function WorkOrderPeekPanel({
                     )}
                   </span>
                 </div>
-                {workOrder.memo && (
-                  <div className="flex items-start gap-3">
-                    <FileText className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">메모</span>
-                    <span className="ml-auto text-right text-sm">{workOrder.memo}</span>
-                  </div>
-                )}
               </div>
             </PeekPanelSection>
 
-            {/* 공정 현황 - 시스템 공정(작업 전, 작업 완료) 제외 */}
+            {/* 메모 */}
+            <PeekPanelSection title="메모" className="border-t">
+              <WorkOrderMemoEditor key={workOrder.id} workOrderId={workOrder.id} memo={workOrder.memo} />
+            </PeekPanelSection>
+
+            {/* 공정 현황 - 시스템 공정(대기중, 작업 완료) 제외 */}
             <PeekPanelSection title="공정 현황" className="border-t">
               <div className="space-y-2">
                 {workOrder.processes
@@ -313,7 +311,7 @@ export function WorkOrderPeekPanel({
                               <SelectItem value="NOT_STARTED">
                                 <span className="flex items-center gap-2">
                                   <span className="h-2 w-2 rounded-full bg-gray-400" />
-                                  작업 전
+                                  미착수
                                 </span>
                               </SelectItem>
                               <SelectItem value="IN_PROGRESS">
@@ -395,6 +393,7 @@ export function WorkOrderPeekPanel({
                                   valueId: number
                                   value: string
                                   price: number
+                                  customInput?: string
                                 }[]
                                 inputValue?: string
                                 isToggleOn?: boolean
@@ -441,6 +440,7 @@ export function WorkOrderPeekPanel({
                                           valueId: number
                                           value: string
                                           price: number
+                                          customInput?: string
                                         }) => (
                                           <Badge
                                             key={val.valueId}
@@ -448,6 +448,7 @@ export function WorkOrderPeekPanel({
                                             className="text-xs font-normal"
                                           >
                                             {val.value}
+                                            {val.customInput && `: ${val.customInput}`}
                                             {val.price > 0 && (
                                               <span className="ml-1 text-muted-foreground">
                                                 +₩{val.price.toLocaleString()}

@@ -234,7 +234,7 @@ export function ProcessesPage() {
       <div className="text-sm text-gray-500 bg-gray-50 p-4 rounded-lg">
         <p className="flex items-center gap-2">
           <Lock className="h-4 w-4" />
-          <span><strong>작업 전</strong>과 <strong>작업 완료</strong>는 기본 공정으로 수정/삭제할 수 없습니다.</span>
+          <span><strong>대기중</strong>과 <strong>작업 완료</strong>는 기본 공정으로 수정/삭제할 수 없습니다.</span>
         </p>
       </div>
 

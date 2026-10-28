@@ -2,6 +2,52 @@ export type WorkOrderStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTE
 export type ProcessStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED'
 export type OrderStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
 export type UserRole = 'ADMIN' | 'COMPANY_ADMIN' | 'COMPANY_MANAGER'
+export type ClientCompanyType = 'COMPANY' | 'BRAND'
+export type OrderSource = 'OWN_MALL' | 'SMART_STORE' | 'NAVER_PAY' | 'PHONE' | 'KAKAO' | 'ETC'
+export type ShippingMethod = 'PARCEL' | 'VISIT' | 'QUICK' | 'OVERSEAS'
+
+export const ORDER_SOURCE_LABELS: Record<OrderSource, string> = {
+  OWN_MALL: '자체몰(메뉴랩)',
+  SMART_STORE: '스마트스토어',
+  NAVER_PAY: '네이버페이',
+  PHONE: '전화',
+  KAKAO: '카카오톡',
+  ETC: '기타',
+}
+
+export const SHIPPING_METHOD_LABELS: Record<ShippingMethod, string> = {
+  PARCEL: '택배',
+  VISIT: '방문',
+  QUICK: '퀵',
+  OVERSEAS: '해외배송',
+}
+
+// 고객사: 회사(최상위) / 브랜드(회사 하위)
+export interface ClientCompany {
+  id: number
+  name: string
+  displayName: string
+  type: ClientCompanyType
+  parentId?: number
+  memo?: string
+  brands?: ClientCompany[]
+}
+
+export interface ClientCompanyRequest {
+  name: string
+  parentId?: number
+  memo?: string
+}
+
+// 배송지 (방문 수령이어도 값 유지)
+export interface ShippingInfo {
+  recipientName?: string
+  recipientPhone?: string
+  zipCode?: string
+  address?: string
+  addressDetail?: string
+  deliveryMessage?: string
+}
 
 export interface User {
   id: number
@@ -30,6 +76,8 @@ export interface Customer {
   email?: string
   address?: string
   memo?: string
+  clientCompanyId?: number
+  clientCompanyName?: string
   createdAt: string
 }
 
@@ -48,6 +96,7 @@ export interface OrderSummary {
   orderNumber: string
   orderName: string
   customerName?: string
+  clientName?: string
   status: OrderStatus
   workOrderCount: number
   completedCount: number
@@ -71,6 +120,10 @@ export interface Order {
   orderNumber: string
   orderName: string
   customer?: Customer
+  clientCompany?: ClientCompany
+  orderSource?: OrderSource
+  shippingMethod?: ShippingMethod
+  shippingInfo?: ShippingInfo
   status: OrderStatus
   workOrders: WorkOrderSummary[]
   workOrderCount: number
@@ -85,18 +138,16 @@ export interface Order {
 export interface OrderCreateRequest {
   orderName: string
   customerId?: number
+  clientCompanyId?: number
+  orderSource?: OrderSource
+  shippingMethod?: ShippingMethod
+  shippingInfo?: ShippingInfo
   orderDate?: string
   dueDate?: string
   memo?: string
 }
 
-export interface OrderUpdateRequest {
-  orderName?: string
-  customerId?: number
-  orderDate?: string
-  dueDate?: string
-  memo?: string
-}
+export type OrderUpdateRequest = Partial<OrderCreateRequest>
 
 export interface WorkOrderProcess {
   id: number
@@ -142,6 +193,7 @@ export interface KanbanCard {
   orderGroupName?: string  // 상위 주문명 (주문에 속한 작업인 경우)
   productName?: string
   customerName?: string
+  clientName?: string  // 상호명 (고객사 회사/브랜드명)
   quantity: number
   processStatus: ProcessStatus
   workOrderStatus: WorkOrderStatus
@@ -217,6 +269,8 @@ export interface CustomerCreateRequest {
   email?: string
   address?: string
   memo?: string
+  clientCompanyId?: number
+  clientCompanyName?: string
 }
 
 export interface ProductCreateRequest {
@@ -240,5 +294,20 @@ export interface Attachment {
   fileSize: number
   downloadUrl: string
   thumbnailUrl?: string
+  createdAt: string
+}
+
+export type OrderFileCategory = 'QUOTE' | 'DESIGN'
+
+export interface OrderAttachment {
+  id: number
+  orderId: number
+  orderNumber: string
+  category: OrderFileCategory
+  originalFilename: string
+  contentType: string
+  fileSize: number
+  downloadUrl: string
+  uploadedBy?: string
   createdAt: string
 }
