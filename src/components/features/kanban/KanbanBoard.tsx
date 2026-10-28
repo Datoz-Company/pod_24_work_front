@@ -22,6 +22,7 @@ import { KanbanCard } from './KanbanCard'
 import { MiniCardDragOverlay } from './MiniCardDragOverlay'
 import { ProcessGroupDropZone } from './ProcessGroupDropZone'
 import { WorkOrderPeekPanel } from './WorkOrderPeekPanel'
+import { KanbanFilterBar, applyKanbanFilter, EMPTY_KANBAN_FILTER, type KanbanFilter } from './KanbanFilterBar'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import {
   AlertDialog,
@@ -58,6 +59,9 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
   // 작업 전으로 되돌리기 다이얼로그 상태
   const [showResetDialog, setShowResetDialog] = useState(false)
   const [resetTargetCard, setResetTargetCard] = useState<KanbanCardType | null>(null)
+
+  // 칸반 필터 (검색어 / 출고일)
+  const [filter, setFilter] = useState<KanbanFilter>(EMPTY_KANBAN_FILTER)
 
   // 스크롤 관련 상태
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -143,7 +147,7 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
       queryClient.invalidateQueries({ queryKey: ['workOrder'] })
       queryClient.invalidateQueries({ queryKey: ['order'] })
       queryClient.invalidateQueries({ queryKey: ['orders'] })
-      toast.success('작업이 "작업 전" 상태로 변경되었습니다')
+      toast.success('작업이 "대기중" 상태로 변경되었습니다')
       setShowResetDialog(false)
       setResetTargetCard(null)
     },
@@ -152,17 +156,18 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
     },
   })
 
-  // 컬럼 분류: 작업 전, 중간 공정, 작업 완료
+  // 컬럼 분류: 대기중, 중간 공정, 작업 완료 (필터 적용 후)
   const { pendingColumns, middleColumns, completedColumns } = useMemo(() => {
-    const pending = columns.filter(
+    const visibleColumns = applyKanbanFilter(columns, filter)
+    const pending = visibleColumns.filter(
       (c) => c.process.isSystem && c.process.systemType === 'PENDING'
     )
-    const middle = columns.filter((c) => !c.process.isSystem)
-    const completed = columns.filter(
+    const middle = visibleColumns.filter((c) => !c.process.isSystem)
+    const completed = visibleColumns.filter(
       (c) => c.process.isSystem && c.process.systemType === 'COMPLETED'
     )
     return { pendingColumns: pending, middleColumns: middle, completedColumns: completed }
-  }, [columns])
+  }, [columns, filter])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -363,7 +368,7 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
         workOrderProcessId: resetTargetCard.workOrderProcessId,
         status: 'NOT_STARTED',
       })
-      toast.success('해당 공정이 작업 전으로 변경되었습니다')
+      toast.success('해당 공정이 미착수로 변경되었습니다')
       setShowResetDialog(false)
       setResetTargetCard(null)
     }
@@ -404,7 +409,9 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
   }
 
   return (
-    <div className="h-full">
+    <div className="flex h-full flex-col">
+      <KanbanFilterBar filter={filter} onChange={setFilter} />
+
       {/* 스크롤바 숨김 스타일 */}
       <style>{`
         .kanban-scroll-container {
@@ -425,7 +432,7 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="relative h-full">
+        <div className="relative min-h-0 flex-1">
           {/* 왼쪽 스크롤 버튼 */}
           {canScrollLeft && (
             <button
@@ -458,7 +465,7 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
             ref={scrollContainerRef}
             className="kanban-scroll-container flex h-full gap-4 overflow-x-auto p-4"
           >
-            {/* 작업 전 컬럼 */}
+            {/* 대기중 컬럼 */}
             {pendingColumns.map((column) => (
               <KanbanColumn
                 key={column.process.id}
@@ -517,14 +524,14 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
       <AlertDialog open={showResetDialog} onOpenChange={handleResetDialogClose}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>작업 전으로 이동</AlertDialogTitle>
+            <AlertDialogTitle>대기중으로 이동</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2">
                 <p>
-                  모든 공정을 작업 전으로 이동 시키겠습니까?
+                  모든 공정을 대기중으로 이동 시키겠습니까?
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  "모든 작업 변경하기"를 선택하면 이 작업의 모든 공정이 작업 전 상태로 변경됩니다.
+                  "모든 작업 변경하기"를 선택하면 이 작업의 모든 공정이 미착수 상태로 변경되고 작업은 대기중으로 이동합니다.
                 </p>
               </div>
             </AlertDialogDescription>

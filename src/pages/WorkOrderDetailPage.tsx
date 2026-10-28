@@ -19,6 +19,7 @@ import {
   Copy,
   Edit,
   ChevronRight,
+  FileSpreadsheet,
 } from 'lucide-react'
 import {
   Select,
@@ -28,6 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
+import { excelService } from '@/services/excelService'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
@@ -69,14 +71,14 @@ const statusConfig: Record<
   string,
   { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; color: string }
 > = {
-  PENDING: { label: '작업 전', variant: 'secondary', color: 'bg-gray-500' },
+  PENDING: { label: '대기중', variant: 'secondary', color: 'bg-gray-500' },
   IN_PROGRESS: { label: '진행중', variant: 'default', color: 'bg-blue-500' },
   COMPLETED: { label: '완료', variant: 'outline', color: 'bg-green-500' },
   REJECTED: { label: '반려', variant: 'destructive', color: 'bg-red-500' },
 }
 
 const processStatusConfig: Record<ProcessStatus, { label: string; icon: typeof Circle; color: string }> = {
-  NOT_STARTED: { label: '대기중', icon: Circle, color: 'text-gray-400' },
+  NOT_STARTED: { label: '미착수', icon: Circle, color: 'text-gray-400' },
   IN_PROGRESS: { label: '진행중', icon: PlayCircle, color: 'text-blue-500' },
   COMPLETED: { label: '완료', icon: CheckCircle2, color: 'text-green-500' },
 }
@@ -335,6 +337,18 @@ export function WorkOrderDetailPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              excelService
+                .workInstruction(workOrder.id, workOrder.orderNumber)
+                .catch(() => toast.error('작업 지시서 생성에 실패했습니다'))
+            }
+          >
+            <FileSpreadsheet className="mr-1 h-4 w-4" />
+            작업 지시서 엑셀
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
@@ -524,7 +538,7 @@ export function WorkOrderDetailPage() {
                         attributeId: number
                         attributeName: string
                         previewType?: string
-                        selectedValues?: { valueId: number; value: string }[]
+                        selectedValues?: { valueId: number; value: string; customInput?: string }[]
                         inputValue?: string
                         isToggleOn?: boolean
                       }) => {
@@ -542,7 +556,7 @@ export function WorkOrderDetailPage() {
                         } else {
                           // 일반 선택값
                           if (!attr.selectedValues || attr.selectedValues.length === 0) return null
-                          displayValue = attr.selectedValues.map(v => v.value).join(', ')
+                          displayValue = attr.selectedValues.map(v => (v.customInput ? `${v.value}: ${v.customInput}` : v.value)).join(', ')
                         }
 
                         return (
@@ -648,7 +662,7 @@ export function WorkOrderDetailPage() {
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="NOT_STARTED">대기</SelectItem>
+                                    <SelectItem value="NOT_STARTED">미착수</SelectItem>
                                     <SelectItem value="IN_PROGRESS">진행</SelectItem>
                                     <SelectItem value="COMPLETED">완료</SelectItem>
                                   </SelectContent>

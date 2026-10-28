@@ -11,8 +11,10 @@ interface FileUploaderProps {
   compact?: boolean
 }
 
-const DEFAULT_ACCEPT = '.pdf,.jpg,.jpeg,.png,.gif,.webp'
-const DEFAULT_MAX_SIZE_MB = 10
+// 형식 제한 없음 (Excel, AI 등 허용) — 실행 파일만 차단, 서버 FilePolicy와 동일
+const DEFAULT_ACCEPT = ''
+const DEFAULT_MAX_SIZE_MB = 100
+const BLOCKED_EXTENSIONS = ['exe', 'msi', 'bat', 'cmd', 'com', 'scr', 'ps1', 'sh', 'jar', 'vbs', 'dll', 'app']
 
 export function FileUploader({
   onUpload,
@@ -32,9 +34,9 @@ export function FileUploader({
         return `파일 크기가 ${maxSizeMB}MB를 초과합니다.`
       }
 
-      const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif', 'image/webp']
-      if (!allowedTypes.includes(file.type)) {
-        return 'PDF, JPEG, PNG, GIF, WEBP 파일만 업로드 가능합니다.'
+      const extension = file.name.split('.').pop()?.toLowerCase() ?? ''
+      if (BLOCKED_EXTENSIONS.includes(extension)) {
+        return `실행 파일(.${extension})은 업로드할 수 없습니다.`
       }
 
       return null
@@ -158,7 +160,7 @@ export function FileUploader({
               파일을 드래그하거나 클릭하여 선택
             </p>
             <p className="text-xs text-muted-foreground">
-              PDF, 이미지 (최대 {maxSizeMB}MB)
+              모든 형식 · Excel, AI, PDF, 이미지 (최대 {maxSizeMB}MB)
             </p>
             <input
               type="file"

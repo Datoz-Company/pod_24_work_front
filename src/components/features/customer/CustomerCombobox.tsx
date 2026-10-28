@@ -51,6 +51,7 @@ export function CustomerCombobox({
         newCustomer,
       ])
       queryClient.invalidateQueries({ queryKey: ['customers'] })
+      queryClient.invalidateQueries({ queryKey: ['client-companies'] })
       onChange(newCustomer.id, newCustomer)
       setOpen(false)
       setSearchValue('')

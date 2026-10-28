@@ -4,6 +4,7 @@ import { LoginPage } from '@/pages/LoginPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { OrdersPage } from '@/pages/OrdersPage'
 import { OrderDetailPage } from '@/pages/OrderDetailPage'
+import { OrderFormPage } from '@/pages/OrderFormPage'
 import { WorkStatusPage } from '@/pages/WorkStatusPage'
 import { WorkOrderDetailPage } from '@/pages/WorkOrderDetailPage'
 import { ProcessesPage } from '@/pages/ProcessesPage'
@@ -22,6 +23,8 @@ function App() {
       <Route path="/register" element={<RegisterPage />} />
       <Route element={<MainLayout />}>
         <Route path="/orders" element={<OrdersPage />} />
+        <Route path="/orders/new" element={<OrderFormPage />} />
+        <Route path="/orders/:id/edit" element={<OrderFormPage />} />
         <Route path="/orders/:id" element={<OrderDetailPage />} />
         <Route path="/work-status" element={<WorkStatusPage />} />
         <Route path="/work-orders/:id" element={<WorkOrderDetailPage />} />

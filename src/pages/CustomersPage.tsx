@@ -22,6 +22,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type { Customer, CustomerCreateRequest } from '@/types'
+import { ClientCompanyCombobox } from '@/components/features/client/ClientCompanyCombobox'
 
 export function CustomersPage() {
   const navigate = useNavigate()
@@ -48,6 +49,7 @@ export function CustomersPage() {
     mutationFn: customerService.create,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] })
+      queryClient.invalidateQueries({ queryKey: ['client-companies'] })
       closeDialog()
     },
   })
@@ -57,6 +59,7 @@ export function CustomersPage() {
       customerService.update(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] })
+      queryClient.invalidateQueries({ queryKey: ['client-companies'] })
       closeDialog()
     },
   })
@@ -65,6 +68,7 @@ export function CustomersPage() {
     mutationFn: customerService.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] })
+      queryClient.invalidateQueries({ queryKey: ['client-companies'] })
     },
   })
 
@@ -82,6 +86,7 @@ export function CustomersPage() {
       email: customer.email || '',
       address: customer.address || '',
       memo: customer.memo || '',
+      clientCompanyId: customer.clientCompanyId,
     })
     setIsDialogOpen(true)
   }
@@ -131,6 +136,7 @@ export function CustomersPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>고객명</TableHead>
+                <TableHead>소속 회사</TableHead>
                 <TableHead>전화번호</TableHead>
                 <TableHead>이메일</TableHead>
                 <TableHead>주소</TableHead>
@@ -145,6 +151,7 @@ export function CustomersPage() {
                   onClick={() => navigate(`/customers/${customer.id}`)}
                 >
                   <TableCell className="font-medium">{customer.name}</TableCell>
+                  <TableCell>{customer.clientCompanyName || '-'}</TableCell>
                   <TableCell>{customer.phone || '-'}</TableCell>
                   <TableCell>{customer.email || '-'}</TableCell>
                   <TableCell className="max-w-xs truncate">
@@ -178,7 +185,7 @@ export function CustomersPage() {
               ))}
               {customers.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
                     고객이 없습니다
                   </TableCell>
                 </TableRow>
@@ -205,6 +212,14 @@ export function CustomersPage() {
                   setFormData({ ...formData, name: e.target.value })
                 }
                 required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>소속 회사</Label>
+              <ClientCompanyCombobox
+                value={formData.clientCompanyId}
+                onChange={(clientCompanyId) => setFormData({ ...formData, clientCompanyId })}
+                placeholder="비워두면 고객명으로 회사가 생성됩니다"
               />
             </div>
             <div className="space-y-2">

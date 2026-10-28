@@ -56,14 +56,14 @@ interface WorkOrderDetailSheetProps {
 }
 
 const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-  PENDING: { label: '작업 전', variant: 'secondary' },
+  PENDING: { label: '대기중', variant: 'secondary' },
   IN_PROGRESS: { label: '작업 중', variant: 'default' },
   COMPLETED: { label: '완료', variant: 'outline' },
   REJECTED: { label: '반려', variant: 'destructive' },
 }
 
 const processStatusConfig: Record<ProcessStatus, { label: string; color: string }> = {
-  NOT_STARTED: { label: '작업 전', color: 'bg-gray-100 text-gray-600' },
+  NOT_STARTED: { label: '미착수', color: 'bg-gray-100 text-gray-600' },
   IN_PROGRESS: { label: '작업 중', color: 'bg-blue-100 text-blue-700' },
   COMPLETED: { label: '작업 완료', color: 'bg-green-100 text-green-700' },
 }
@@ -264,7 +264,7 @@ export function WorkOrderDetailSheet({
                                     <SelectItem value="NOT_STARTED">
                                       <span className="flex items-center gap-2">
                                         <span className="h-2 w-2 rounded-full bg-gray-400" />
-                                        작업 전
+                                        미착수
                                       </span>
                                     </SelectItem>
                                     <SelectItem value="IN_PROGRESS">
@@ -329,19 +329,20 @@ export function WorkOrderDetailSheet({
                               {/* 선택된 속성값 표시 */}
                               {snapshot?.attributes && snapshot.attributes.length > 0 && (
                                 <div className="space-y-1.5 pt-1 border-t">
-                                  {snapshot.attributes.map((attr: { attributeId: number; attributeName: string; selectedValues: { valueId: number; value: string; price: number }[] }) => (
+                                  {snapshot.attributes.map((attr: { attributeId: number; attributeName: string; selectedValues: { valueId: number; value: string; price: number; customInput?: string }[] }) => (
                                     <div key={attr.attributeId} className="flex items-start gap-2 text-xs">
                                       <span className="text-muted-foreground min-w-[60px]">
                                         {attr.attributeName}:
                                       </span>
                                       <div className="flex flex-wrap gap-1">
-                                        {attr.selectedValues?.map((val: { valueId: number; value: string; price: number }) => (
+                                        {attr.selectedValues?.map((val: { valueId: number; value: string; price: number; customInput?: string }) => (
                                           <Badge
                                             key={val.valueId}
                                             variant="secondary"
                                             className="text-xs font-normal"
                                           >
                                             {val.value}
+                                            {val.customInput && `: ${val.customInput}`}
                                             {val.price > 0 && (
                                               <span className="ml-1 text-muted-foreground">
                                                 +₩{val.price.toLocaleString()}

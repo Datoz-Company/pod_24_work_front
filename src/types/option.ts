@@ -12,6 +12,7 @@ export interface OptionAttributeValue {
   imageUrl?: string
   price: number
   isEnabled: boolean
+  allowCustomInput?: boolean      // 직접 입력 허용 (예: 별도 사이즈)
   displayOrder: number
   triggerAttributeValueIds?: string
   triggerVisibleType?: TriggerVisibleType
@@ -110,6 +111,7 @@ export interface AttributeValueCreateRequest {
   value: string
   imageUrl?: string
   price?: number
+  allowCustomInput?: boolean
   triggerAttributeValueIds?: string
   triggerVisibleType?: TriggerVisibleType
 }
