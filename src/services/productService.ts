@@ -34,6 +34,12 @@ export const productService = {
     return response.data.data
   },
 
+  // 상품 종류 이름 일괄 변경 (to가 비어 있으면 미분류로)
+  renameCategory: async (from: string, to: string): Promise<number> => {
+    const response = await api.put<ApiResponse<number>>('/products/categories/rename', { from, to })
+    return response.data.data
+  },
+
   delete: async (id: number): Promise<void> => {
     await api.delete(`/products/${id}`)
   },

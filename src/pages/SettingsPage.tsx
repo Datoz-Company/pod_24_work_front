@@ -9,6 +9,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
@@ -428,6 +438,7 @@ function TeamTab() {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [deactivateTarget, setDeactivateTarget] = useState<{ id: number; name: string } | null>(null);
   const [inviteData, setInviteData] = useState<InviteMemberRequest>({
     username: '',
     password: '',
@@ -474,6 +485,7 @@ function TeamTab() {
     mutationFn: (memberId: number) => companyApi.removeMember(memberId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['team-members'] });
+      setDeactivateTarget(null);
       toast.success('팀원이 비활성화되었습니다');
     },
     onError: (error: any) => {
@@ -669,11 +681,7 @@ function TeamTab() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => {
-                          if (confirm('이 팀원을 비활성화하시겠습니까?')) {
-                            removeMutation.mutate(member.id);
-                          }
-                        }}
+                        onClick={() => setDeactivateTarget({ id: member.id, name: member.name })}
                         className="text-red-600 hover:text-red-700 hover:bg-red-50"
                       >
                         <UserMinus className="h-4 w-4 mr-1" />
@@ -697,6 +705,26 @@ function TeamTab() {
           )}
         </div>
       </CardContent>
+
+      <AlertDialog open={!!deactivateTarget} onOpenChange={(open) => !open && setDeactivateTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>팀원 비활성화</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{deactivateTarget?.name}</strong> 님을 비활성화하면 로그인할 수 없습니다. 언제든 다시 활성화할 수 있습니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deactivateTarget && removeMutation.mutate(deactivateTarget.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              비활성화
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

@@ -33,6 +33,19 @@ export interface ClientCompany {
   brands?: ClientCompany[]
 }
 
+// 고객사(회사 / 브랜드) 단위 파일 — 로고 등
+export interface ClientCompanyFile {
+  id: number
+  clientCompanyId: number
+  clientCompanyName: string
+  originalFilename: string
+  contentType: string
+  fileSize: number
+  downloadUrl: string
+  uploadedBy?: string
+  createdAt: string
+}
+
 export interface ClientCompanyRequest {
   name: string
   parentId?: number
@@ -47,6 +60,20 @@ export interface ShippingInfo {
   address?: string
   addressDetail?: string
   deliveryMessage?: string
+}
+
+// 고객 배송지 주소록 항목
+export interface CustomerAddress {
+  id: number
+  label?: string
+  isDefault: boolean
+  shippingInfo: ShippingInfo
+}
+
+export interface CustomerAddressRequest {
+  label?: string
+  isDefault?: boolean
+  shippingInfo: ShippingInfo
 }
 
 export interface User {
@@ -75,6 +102,8 @@ export interface Customer {
   phone?: string
   email?: string
   address?: string
+  /** 주소록의 기본 배송지 한 줄 요약 (고객 목록 API에서만 채워짐) */
+  defaultAddress?: string
   memo?: string
   clientCompanyId?: number
   clientCompanyName?: string
@@ -98,6 +127,8 @@ export interface OrderSummary {
   customerName?: string
   clientName?: string
   status: OrderStatus
+  orderSource?: OrderSource
+  shippingMethod?: ShippingMethod
   workOrderCount: number
   completedCount: number
 }

@@ -7,10 +7,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import type { Attachment } from '@/types'
+
+/** 미리보기에 필요한 최소 정보 — 작업 첨부·주문 파일·회사 파일 모두 사용 */
+export interface PreviewableFile {
+  originalFilename: string
+  contentType: string
+  downloadUrl: string
+}
 
 interface FilePreviewProps {
-  attachment: Attachment | null
+  attachment: PreviewableFile | null
   open: boolean
   onOpenChange: (open: boolean) => void
 }

@@ -1,18 +1,21 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { Plus, Edit, Trash2, Search } from 'lucide-react'
 import { customerService } from '@/services/customerService'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import {
   Table,
   TableBody,
@@ -21,8 +24,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import type { Customer, CustomerCreateRequest } from '@/types'
-import { ClientCompanyCombobox } from '@/components/features/client/ClientCompanyCombobox'
+import type { Customer } from '@/types'
+import { CustomerFormDialog } from '@/components/features/customer/CustomerFormDialog'
 
 export function CustomersPage() {
   const navigate = useNavigate()
@@ -30,13 +33,7 @@ export function CustomersPage() {
   const [search, setSearch] = useState('')
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null)
-  const [formData, setFormData] = useState<CustomerCreateRequest>({
-    name: '',
-    phone: '',
-    email: '',
-    address: '',
-    memo: '',
-  })
+  const [deleteTarget, setDeleteTarget] = useState<Customer | null>(null)
 
   const { data: response, isLoading } = useQuery({
     queryKey: ['customers', search],
@@ -45,72 +42,32 @@ export function CustomersPage() {
 
   const customers = response?.content || []
 
-  const createMutation = useMutation({
-    mutationFn: customerService.create,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['customers'] })
-      queryClient.invalidateQueries({ queryKey: ['client-companies'] })
-      closeDialog()
-    },
-  })
-
-  const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: CustomerCreateRequest }) =>
-      customerService.update(id, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['customers'] })
-      queryClient.invalidateQueries({ queryKey: ['client-companies'] })
-      closeDialog()
-    },
-  })
-
   const deleteMutation = useMutation({
     mutationFn: customerService.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] })
       queryClient.invalidateQueries({ queryKey: ['client-companies'] })
+      setDeleteTarget(null)
+      toast.success('고객을 삭제했습니다.')
     },
+    onError: () => toast.error('고객 삭제에 실패했습니다.'),
   })
 
-  const closeDialog = () => {
-    setIsDialogOpen(false)
+  const openCreateDialog = () => {
     setEditingCustomer(null)
-    setFormData({ name: '', phone: '', email: '', address: '', memo: '' })
+    setIsDialogOpen(true)
   }
 
   const openEditDialog = (customer: Customer) => {
     setEditingCustomer(customer)
-    setFormData({
-      name: customer.name,
-      phone: customer.phone || '',
-      email: customer.email || '',
-      address: customer.address || '',
-      memo: customer.memo || '',
-      clientCompanyId: customer.clientCompanyId,
-    })
     setIsDialogOpen(true)
-  }
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (editingCustomer) {
-      updateMutation.mutate({ id: editingCustomer.id, data: formData })
-    } else {
-      createMutation.mutate(formData)
-    }
-  }
-
-  const handleDelete = (id: number) => {
-    if (window.confirm('이 고객을 삭제하시겠습니까?')) {
-      deleteMutation.mutate(id)
-    }
   }
 
   return (
     <div className="p-6">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold">고객 관리</h1>
-        <Button onClick={() => setIsDialogOpen(true)}>
+        <Button onClick={openCreateDialog}>
           <Plus className="mr-2 h-4 w-4" />
           고객 추가
         </Button>
@@ -139,7 +96,7 @@ export function CustomersPage() {
                 <TableHead>소속 회사</TableHead>
                 <TableHead>전화번호</TableHead>
                 <TableHead>이메일</TableHead>
-                <TableHead>주소</TableHead>
+                <TableHead>기본 배송지</TableHead>
                 <TableHead className="w-24">작업</TableHead>
               </TableRow>
             </TableHeader>
@@ -154,14 +111,15 @@ export function CustomersPage() {
                   <TableCell>{customer.clientCompanyName || '-'}</TableCell>
                   <TableCell>{customer.phone || '-'}</TableCell>
                   <TableCell>{customer.email || '-'}</TableCell>
-                  <TableCell className="max-w-xs truncate">
-                    {customer.address || '-'}
+                  <TableCell className="max-w-[280px] truncate" title={customer.defaultAddress}>
+                    {customer.defaultAddress || '-'}
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
                       <Button
                         variant="ghost"
                         size="icon"
+                        aria-label="고객 수정"
                         onClick={(e) => {
                           e.stopPropagation()
                           openEditDialog(customer)
@@ -172,9 +130,10 @@ export function CustomersPage() {
                       <Button
                         variant="ghost"
                         size="icon"
+                        aria-label="고객 삭제"
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleDelete(customer.id)
+                          setDeleteTarget(customer)
                         }}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
@@ -195,85 +154,35 @@ export function CustomersPage() {
         </div>
       )}
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {editingCustomer ? '고객 수정' : '새 고객 추가'}
-            </DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">고객명 *</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) =>
-                  setFormData({ ...formData, name: e.target.value })
-                }
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>소속 회사</Label>
-              <ClientCompanyCombobox
-                value={formData.clientCompanyId}
-                onChange={(clientCompanyId) => setFormData({ ...formData, clientCompanyId })}
-                placeholder="비워두면 고객명으로 회사가 생성됩니다"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="phone">전화번호</Label>
-              <Input
-                id="phone"
-                value={formData.phone}
-                onChange={(e) =>
-                  setFormData({ ...formData, phone: e.target.value })
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="email">이메일</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) =>
-                  setFormData({ ...formData, email: e.target.value })
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="address">주소</Label>
-              <Input
-                id="address"
-                value={formData.address}
-                onChange={(e) =>
-                  setFormData({ ...formData, address: e.target.value })
-                }
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="memo">메모</Label>
-              <Input
-                id="memo"
-                value={formData.memo}
-                onChange={(e) =>
-                  setFormData({ ...formData, memo: e.target.value })
-                }
-              />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={closeDialog}>
-                취소
-              </Button>
-              <Button type="submit">
-                {editingCustomer ? '수정' : '추가'}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <CustomerFormDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        customer={editingCustomer}
+        onSaved={(saved) => {
+          // 새 고객은 상세로 이동해 배송지를 바로 추가할 수 있게
+          if (!editingCustomer) navigate(`/customers/${saved.id}`)
+        }}
+      />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>고객 삭제</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{deleteTarget?.name}</strong> 고객을 삭제하시겠습니까? 이미 등록된 주문과 작업은 유지됩니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteMutation.isPending ? '삭제 중...' : '삭제'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

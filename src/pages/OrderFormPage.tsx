@@ -12,8 +12,15 @@ import { Textarea } from '@/components/ui/textarea'
 import { CustomerCombobox } from '@/components/features/customer/CustomerCombobox'
 import { ClientCompanyCombobox } from '@/components/features/client/ClientCompanyCombobox'
 import { ShippingSection } from '@/components/features/order/ShippingSection'
-import { OrderItemCard, createEmptyOrderItem, UNCATEGORIZED, type OrderItemFormData } from '@/components/features/order/OrderItemCard'
-import { formatFileSize } from '@/components/features/order/OrderFilesPanel'
+import {
+  OrderItemCard,
+  createEmptyOrderItem,
+  getOrderItemLabel,
+  validateOrderItems,
+  UNCATEGORIZED,
+  type OrderItemFormData,
+} from '@/components/features/order/OrderItemCard'
+import { formatFileSize } from '@/lib/format'
 import { FileUploader } from '@/components/features/attachment/FileUploader'
 import { orderService } from '@/services/orderService'
 import { productService } from '@/services/productService'
@@ -30,6 +37,7 @@ import {
   type ShippingInfo,
   type ShippingMethod,
 } from '@/types'
+import { invalidateWorkData } from '@/lib/queryInvalidation'
 
 const ORDER_SOURCES = Object.keys(ORDER_SOURCE_LABELS) as OrderSource[]
 
@@ -52,6 +60,12 @@ export function OrderFormPage() {
   const orderId = Number(id)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  // 서버가 주문 배송지를 주문자 주소록·연락처에 자동 반영하므로 고객 화면 데이터도 갱신
+  const invalidateCustomerData = () => {
+    queryClient.invalidateQueries({ queryKey: ['customer-addresses'] })
+    queryClient.invalidateQueries({ queryKey: ['customer'] })
+    queryClient.invalidateQueries({ queryKey: ['customers'] })
+  }
   const canViewQuotes = useCanViewQuotes()
 
   const [orderName, setOrderName] = useState('')
@@ -111,10 +125,7 @@ export function OrderFormPage() {
     setItems((prev) => [...prev.map((item) => ({ ...item, isExpanded: false })), createEmptyOrderItem()])
   }
 
-  const getItemLabel = (item: OrderItemFormData): string => {
-    if (item.itemName.trim()) return item.itemName.trim()
-    return products.find((p) => p.id === item.productId)?.name ?? ''
-  }
+  const getItemLabel = (item: OrderItemFormData) => getOrderItemLabel(item, products)
 
   // 주문명 미입력 시 자동 생성: "{주문자} {첫 품목} 외 N건"
   const autoOrderName = useMemo(() => {
@@ -139,19 +150,9 @@ export function OrderFormPage() {
   })
 
   const validateItems = (): boolean => {
-    for (const [index, item] of items.entries()) {
-      if (!item.productId) {
-        toast.error(`품목 ${index + 1}의 상품을 선택해주세요.`)
-        return false
-      }
-      const product = products.find((p) => p.id === item.productId)
-      const hasProcess = product?.processes?.some((p) => !p.isSystem)
-      if (!hasProcess) {
-        toast.error(`"${product?.name}" 상품에 공정이 설정되어 있지 않습니다.`)
-        return false
-      }
-    }
-    return true
+    const error = validateOrderItems(items, products)
+    if (error) toast.error(error)
+    return !error
   }
 
   const handleSubmit = async () => {
@@ -161,9 +162,8 @@ export function OrderFormPage() {
       if (isEdit) {
         await orderService.update(orderId, buildOrderRequest())
         toast.success('주문을 수정했습니다.')
-        queryClient.invalidateQueries({ queryKey: ['order', orderId] })
-        queryClient.invalidateQueries({ queryKey: ['orders'] })
-        queryClient.invalidateQueries({ queryKey: ['kanban'] })
+        invalidateWorkData(queryClient)
+        invalidateCustomerData()
         navigate(`/orders/${orderId}`)
         return
       }
@@ -185,8 +185,8 @@ export function OrderFormPage() {
         await orderAttachmentService.upload(order.id, pending.category, pending.file)
       }
 
-      queryClient.invalidateQueries({ queryKey: ['orders'] })
-      queryClient.invalidateQueries({ queryKey: ['kanban'] })
+      invalidateWorkData(queryClient)
+      invalidateCustomerData()
       toast.success(`주문을 등록했습니다. (품목 ${items.length}건)`)
       navigate(`/orders/${order.id}`)
     } catch (error) {
@@ -335,7 +335,7 @@ export function OrderFormPage() {
                   <Input id="order-date" type="date" value={orderDate} onChange={(e) => setOrderDate(e.target.value)} />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="due-date">납기일 (출고 예정일)</Label>
+                  <Label htmlFor="due-date">출고 예정일</Label>
                   <Input id="due-date" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
                 </div>
               </div>
@@ -381,6 +381,7 @@ export function OrderFormPage() {
                 shippingInfo={shippingInfo}
                 onShippingInfoChange={setShippingInfo}
                 customer={customer}
+                autoFillDefault={!isEdit}
               />
             </CardContent>
           </Card>

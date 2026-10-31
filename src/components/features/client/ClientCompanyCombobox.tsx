@@ -23,6 +23,8 @@ interface ClientCompanyComboboxProps {
   onChange: (clientCompanyId: number | undefined) => void
   placeholder?: string
   className?: string
+  /** 회사만 선택 (고객의 소속은 회사 단위 — 브랜드는 주문에서 지정) */
+  companiesOnly?: boolean
 }
 
 /**
@@ -35,6 +37,7 @@ export function ClientCompanyCombobox({
   onChange,
   placeholder = '회사 또는 상호명을 선택하세요',
   className,
+  companiesOnly = false,
 }: ClientCompanyComboboxProps) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -136,7 +139,7 @@ export function ClientCompanyCombobox({
                     {filtered.map((company) => (
                       <div key={company.id}>
                         {renderItem(company, false)}
-                        {(company.brands ?? []).map((brand) => renderItem(brand, true))}
+                        {!companiesOnly && (company.brands ?? []).map((brand) => renderItem(brand, true))}
                       </div>
                     ))}
                   </CommandGroup>
@@ -152,7 +155,7 @@ export function ClientCompanyCombobox({
                       {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                       "{searchValue.trim()}" 회사 추가
                     </Button>
-                    {parentForBrand && (
+                    {parentForBrand && !companiesOnly && (
                       <Button
                         variant="ghost"
                         className="w-full justify-start gap-2 text-primary"
