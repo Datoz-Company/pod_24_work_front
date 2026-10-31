@@ -1,7 +1,7 @@
-import { format } from 'date-fns'
-import { ko } from 'date-fns/locale'
-import { User, Phone, Mail, MapPin, FileText, Calendar } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { User, Phone, Mail, Building2, FileText, Calendar } from 'lucide-react'
 import type { Customer } from '@/types'
+import { formatDate } from '@/lib/format'
 
 interface CustomerBasicInfoProps {
   customer: Customer
@@ -54,11 +54,19 @@ export function CustomerBasicInfo({ customer }: CustomerBasicInfoProps) {
           </span>
         </div>
 
-        {/* 주소 */}
-        <div className="flex items-start gap-3">
-          <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-          <span className="text-sm text-muted-foreground min-w-[60px]">주소</span>
-          <span className="text-sm font-medium">{customer.address || '-'}</span>
+        {/* 소속 회사 */}
+        <div className="flex items-center gap-3">
+          <Building2 className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+          <span className="text-sm text-muted-foreground min-w-[60px]">소속 회사</span>
+          <span className="text-sm font-medium">
+            {customer.clientCompanyId ? (
+              <Link to={`/companies/${customer.clientCompanyId}`} className="text-primary hover:underline">
+                {customer.clientCompanyName}
+              </Link>
+            ) : (
+              '-'
+            )}
+          </span>
         </div>
 
         {/* 메모 */}
@@ -75,7 +83,7 @@ export function CustomerBasicInfo({ customer }: CustomerBasicInfoProps) {
           <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
           <span className="text-sm text-muted-foreground min-w-[60px]">등록일</span>
           <span className="text-sm text-muted-foreground">
-            {format(new Date(customer.createdAt), 'yyyy.MM.dd (EEE)', { locale: ko })}
+            {formatDate(customer.createdAt)}
           </span>
         </div>
       </div>

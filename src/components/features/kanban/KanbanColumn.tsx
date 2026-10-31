@@ -1,7 +1,7 @@
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { cn } from '@/lib/utils'
-import { KanbanCard } from './KanbanCard'
+import { KanbanOrderGroup } from './KanbanCard'
 import type { KanbanColumn as KanbanColumnType, KanbanCard as KanbanCardType } from '@/types'
 
 interface KanbanColumnProps {
@@ -26,11 +26,25 @@ const hexToLightBg = (hexColor: string): string => {
 // 시스템 공정별 기본 배경색 (참고 프로젝트 기준)
 const getColumnBgColor = (process: KanbanColumnType['process']): string => {
   if (process.isSystem) {
-    if (process.systemType === 'PENDING') return '#F2F2F2' // 작업 전: 연한 회색
+    if (process.systemType === 'PENDING') return '#F2F2F2' // 대기중: 연한 회색
     if (process.systemType === 'COMPLETED') return '#E8EFFF' // 작업 완료: 연한 파란색
   }
   // 일반 공정: 공정 색상을 연하게 적용
   return hexToLightBg(process.color)
+}
+
+/**
+ * 컬럼 안의 카드를 주문 단위로 묶음 (첫 등장 순서 유지). 주문이 없는 단독 작업은 각자 하나의 그룹.
+ */
+const groupCardsByOrder = (cards: readonly KanbanCardType[]): KanbanCardType[][] => {
+  const groups = new Map<string, KanbanCardType[]>()
+  for (const card of cards) {
+    const key = card.orderId != null ? `order-${card.orderId}` : `work-${card.workOrderId}`
+    const group = groups.get(key)
+    if (group) group.push(card)
+    else groups.set(key, [card])
+  }
+  return [...groups.values()]
 }
 
 export function KanbanColumn({ column, onCardClick, isHighlighted = false }: KanbanColumnProps) {
@@ -51,12 +65,14 @@ export function KanbanColumn({ column, onCardClick, isHighlighted = false }: Kan
     }
   })
 
+  const orderGroups = groupCardsByOrder(column.cards)
+
   return (
     <div className="flex flex-col min-w-[220px] w-[220px] flex-shrink-0">
       {/* 컬럼 헤더 - 단순 텍스트 스타일 */}
       <div className="mb-3 px-2">
         <h3 className="text-sm font-medium text-gray-700">
-          {column.process.name} ({column.cards.length})
+          {column.process.name} ({orderGroups.length})
         </h3>
       </div>
 
@@ -72,11 +88,11 @@ export function KanbanColumn({ column, onCardClick, isHighlighted = false }: Kan
       >
         <div className="space-y-3 w-full">
           <SortableContext items={allDraggableIds} strategy={verticalListSortingStrategy}>
-            {column.cards.map((card) => (
-              <KanbanCard
-                key={`${card.workOrderId}-${card.workOrderProcessId ?? 'completed'}`}
-                card={card}
-                onClick={() => onCardClick?.(card)}
+            {orderGroups.map((cards) => (
+              <KanbanOrderGroup
+                key={`${cards[0].orderId ?? 'wo'}-${cards[0].workOrderId}`}
+                cards={cards}
+                onCardClick={onCardClick}
               />
             ))}
           </SortableContext>

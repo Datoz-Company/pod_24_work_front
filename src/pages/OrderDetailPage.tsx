@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
 import {
   Plus,
   Trash2,
@@ -13,8 +12,6 @@ import {
   ExternalLink,
   Phone,
   Mail,
-  MapPin,
-  Clock,
   Truck,
   FileSpreadsheet,
 } from 'lucide-react'
@@ -47,16 +44,11 @@ import { ORDER_SOURCE_LABELS, SHIPPING_METHOD_LABELS, type OrderStatus } from '@
 import { OrderFilesPanel } from '@/components/features/order/OrderFilesPanel'
 import { excelService } from '@/services/excelService'
 import { toast } from 'sonner'
+import { ORDER_STATUS, WORK_ORDER_STATUS } from '@/lib/status'
+import { formatDate, formatDateTime, formatDueDate, isOverdue } from '@/lib/format'
+import { invalidateWorkData } from '@/lib/queryInvalidation'
 
-const statusConfig: Record<
-  OrderStatus,
-  { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }
-> = {
-  PENDING: { label: '대기', variant: 'secondary' },
-  IN_PROGRESS: { label: '진행중', variant: 'default' },
-  COMPLETED: { label: '완료', variant: 'outline' },
-  CANCELLED: { label: '취소', variant: 'destructive' },
-}
+const statusConfig = ORDER_STATUS
 
 export function OrderDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -78,8 +70,7 @@ export function OrderDetailPage() {
     mutationFn: ({ id, status }: { id: number; status: OrderStatus }) =>
       orderService.updateStatus(id, status),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] })
-      queryClient.invalidateQueries({ queryKey: ['order', orderId] })
+      invalidateWorkData(queryClient)
       toast.success('상태가 변경되었습니다.')
     },
     onError: () => {
@@ -91,9 +82,7 @@ export function OrderDetailPage() {
     mutationFn: (cascadeDelete: boolean) =>
       orderService.delete(orderId, cascadeDelete),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] })
-      queryClient.invalidateQueries({ queryKey: ['kanban'] })
-      queryClient.invalidateQueries({ queryKey: ['work-orders'] })
+      invalidateWorkData(queryClient)
       toast.success('주문이 삭제되었습니다.')
       navigate('/orders')
     },
@@ -138,431 +127,290 @@ export function OrderDetailPage() {
     )
   }
 
+  const shippingAddress = [
+    order.shippingInfo?.zipCode && `(${order.shippingInfo.zipCode})`,
+    order.shippingInfo?.address,
+    order.shippingInfo?.addressDetail,
+  ].filter(Boolean).join(' ')
+  const overdue = isOverdue(order.dueDate) && order.status !== 'COMPLETED'
+
+  // 한 화면에 정보를 가로로 펼치고, 헤더(액션·상태 변경)는 스크롤해도 상단에 고정
   return (
     <div className="space-y-4">
-      {/* 브레드크럼 */}
-      <div className="flex items-center gap-1 text-sm text-muted-foreground">
-        <Link to="/orders" className="hover:text-foreground">주문 관리</Link>
-        <ChevronRight className="h-4 w-4" />
-        <span className="text-foreground">주문 상세</span>
-      </div>
-
-      {/* 헤더 */}
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl font-bold">{order.orderNumber}</h1>
+      {/* 고정 헤더 — main의 p-6 여백만큼 당겨서 스크롤 시 내용이 비치지 않도록 */}
+      <div className="sticky -top-6 z-20 -mx-6 -mt-6 border-b bg-white/95 px-6 pb-3 pt-4 backdrop-blur">
+        <div className="flex items-center gap-1 text-sm text-muted-foreground">
+          <Link to="/orders" className="hover:text-foreground">주문 관리</Link>
+          <ChevronRight className="h-4 w-4" />
+          <span className="text-foreground">주문 상세</span>
+        </div>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <h1 className="truncate text-xl font-bold">{order.orderName}</h1>
+            <span className="font-mono text-sm text-muted-foreground">{order.orderNumber}</span>
             <Badge variant={statusConfig[order.status].variant}>
               {statusConfig[order.status].label}
             </Badge>
           </div>
-          <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
-            {order.orderDate && (
-              <>
-                <span>주문일</span>
-                <span className="text-foreground">{format(new Date(order.orderDate), 'yyyy-MM-dd HH:mm')}</span>
-                <span>|</span>
-              </>
-            )}
-            {order.clientCompany && (
-              <>
-                <span>회사</span>
-                <span className="text-foreground">{order.clientCompany.displayName}</span>
-                <span>|</span>
-              </>
-            )}
-            {order.customer && (
-              <>
-                <span>주문자</span>
-                <span className="text-foreground">{order.customer.name}</span>
-              </>
-            )}
-          </div>
-        </div>
 
-        <div className="flex items-center gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                작업 옵션
-                <MoreHorizontal className="ml-1 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setIsAddWorkOrderOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                작업 추가
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() =>
-                  excelService
-                    .orderWorkInstructions(order.id, order.orderNumber)
-                    .catch(() => toast.error('작업 지시서 생성에 실패했습니다. 주문에 작업이 있는지 확인하세요.'))
-                }
-              >
-                <FileSpreadsheet className="mr-2 h-4 w-4" />
-                작업 지시서 엑셀
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate(`/orders/${orderId}/edit`)}>
-                <Edit className="mr-2 h-4 w-4" />
-                주문 수정
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="text-destructive"
-                onClick={() => setShowDeleteConfirm(true)}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                주문 삭제
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <Button size="sm" onClick={() => navigate(`/orders/${orderId}/edit`)}>
-            <Edit className="mr-1 h-4 w-4" />
-            주문 수정
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* 상태 변경 — 작업 진행에 따라 자동으로 바뀌며, 필요할 때만 직접 변경 */}
+            <div className="flex rounded-md border p-0.5" role="group" aria-label="주문 상태 변경">
+              {(['PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'] as OrderStatus[]).map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => statusMutation.mutate({ id: order.id, status })}
+                  disabled={statusMutation.isPending || order.status === status}
+                  aria-pressed={order.status === status}
+                  className={cn(
+                    'rounded px-2.5 py-1 text-xs font-medium transition-colors',
+                    order.status === status
+                      ? 'bg-primary text-primary-foreground'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                  )}
+                >
+                  {statusConfig[status].label}
+                </button>
+              ))}
+            </div>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  작업 옵션
+                  <MoreHorizontal className="ml-1 h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setIsAddWorkOrderOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  품목 추가
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() =>
+                    excelService
+                      .orderWorkInstructions(order.id, order.orderNumber)
+                      .catch(() => toast.error('작업 지시서 생성에 실패했습니다. 주문에 작업이 있는지 확인하세요.'))
+                  }
+                >
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  작업 지시서 엑셀
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="text-destructive"
+                  onClick={() => setShowDeleteConfirm(true)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  주문 삭제
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button variant="outline" size="sm" onClick={() => setIsAddWorkOrderOpen(true)}>
+              <Plus className="mr-1 h-4 w-4" />
+              품목 추가
+            </Button>
+            <Button size="sm" onClick={() => navigate(`/orders/${orderId}/edit`)}>
+              <Edit className="mr-1 h-4 w-4" />
+              주문 수정
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* 요약 카드 */}
+      {/* 요약 지표 한 줄 */}
       <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 text-sm">
-            <div>
-              <div className="text-muted-foreground mb-1">총 작업 수</div>
-              <div className="font-semibold">{order.workOrderCount || 0}건</div>
+        <CardContent className="grid grid-cols-2 gap-4 p-4 text-sm md:grid-cols-3 lg:grid-cols-6">
+          <div>
+            <div className="mb-1 text-muted-foreground">품목(작업)</div>
+            <div className="font-semibold">{order.workOrderCount || 0}건</div>
+          </div>
+          <div>
+            <div className="mb-1 text-muted-foreground">총 수량</div>
+            <div className="font-semibold">{totalQuantity.toLocaleString()} EA</div>
+          </div>
+          <div>
+            <div className="mb-1 text-muted-foreground">완료 수량</div>
+            <div className="font-semibold text-green-600">{completedQuantity.toLocaleString()} EA</div>
+          </div>
+          <div>
+            <div className="mb-1 text-muted-foreground">진행률</div>
+            <div className="flex items-center gap-2">
+              <Progress value={progressPercent} className="h-2 flex-1" />
+              <span className="text-xs font-semibold">{progressPercent}%</span>
             </div>
-            <div>
-              <div className="text-muted-foreground mb-1">총 수량</div>
-              <div className="font-semibold">{totalQuantity.toLocaleString()} EA</div>
+          </div>
+          <div>
+            <div className="mb-1 text-muted-foreground">출고 예정일</div>
+            <div className={cn('font-semibold', overdue && 'text-destructive')}>
+              {formatDueDate(order.dueDate)}
             </div>
-            <div>
-              <div className="text-muted-foreground mb-1">완료 수량</div>
-              <div className="font-semibold text-green-600">
-                {completedQuantity.toLocaleString()} EA ({progressPercent}%)
-              </div>
-            </div>
-            <div>
-              <div className="text-muted-foreground mb-1">출고 예정일</div>
-              <div className={cn(
-                "font-semibold",
-                order.dueDate && new Date(order.dueDate) < new Date() && order.status !== 'COMPLETED' && "text-destructive"
-              )}>
-                {order.dueDate ? format(new Date(order.dueDate), 'yyyy-MM-dd') : '-'}
-              </div>
-            </div>
-            <div>
-              <div className="text-muted-foreground mb-1">완료일</div>
-              <div className="font-semibold">
-                {order.completedAt ? format(new Date(order.completedAt), 'yyyy-MM-dd') : '-'}
-              </div>
-            </div>
-            <div>
-              <div className="text-muted-foreground mb-1">진행률</div>
-              <div className="flex items-center gap-2">
-                <Progress value={progressPercent} className="flex-1 h-2" />
-                <span className="font-semibold text-xs">{progressPercent}%</span>
-              </div>
-            </div>
+          </div>
+          <div>
+            <div className="mb-1 text-muted-foreground">완료일</div>
+            <div className="font-semibold">{formatDate(order.completedAt)}</div>
           </div>
         </CardContent>
       </Card>
 
-      {/* 메인 컨텐츠 */}
-      <div className="grid gap-4 lg:grid-cols-4">
-        {/* 좌측: 탭 컨텐츠 */}
-        <div className="lg:col-span-3">
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList>
-              <TabsTrigger value="info">주문 정보</TabsTrigger>
-              <TabsTrigger value="work">
-                작업 ({order.workOrderCount || 0})
-              </TabsTrigger>
-            </TabsList>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="info">주문 정보</TabsTrigger>
+          <TabsTrigger value="work">작업 보드 ({order.workOrderCount || 0})</TabsTrigger>
+        </TabsList>
 
-            {/* 주문 정보 탭 */}
-            <TabsContent value="info" className="mt-4 space-y-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">기본 정보</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-[100px_1fr] gap-y-3 text-sm">
-                    <span className="text-muted-foreground">주문명</span>
-                    <span className="font-medium">{order.orderName}</span>
-
-                    <span className="text-muted-foreground">주문번호</span>
-                    <span className="font-mono">{order.orderNumber}</span>
-
-                    <span className="text-muted-foreground">회사 / 상호</span>
-                    <span>{order.clientCompany?.displayName ?? '-'}</span>
-
-                    <span className="text-muted-foreground">주문 경로</span>
-                    <span>{order.orderSource ? ORDER_SOURCE_LABELS[order.orderSource] : '-'}</span>
-
-                    {order.customer && (
-                      <>
-                        <span className="text-muted-foreground">주문자</span>
-                        <Link to={`/customers/${order.customer.id}`} className="text-primary hover:underline inline-flex items-center gap-1">
-                          {order.customer.name}
-                          <ExternalLink className="h-3 w-3" />
-                        </Link>
-                      </>
-                    )}
-
-                    {order.orderDate && (
-                      <>
-                        <span className="text-muted-foreground">주문일</span>
-                        <span>{format(new Date(order.orderDate), 'yyyy-MM-dd HH:mm')}</span>
-                      </>
-                    )}
-
-                    {order.dueDate && (
-                      <>
-                        <span className="text-muted-foreground">출고 예정일</span>
-                        <span className={cn(
-                          new Date(order.dueDate) < new Date() && order.status !== 'COMPLETED' && "text-destructive"
-                        )}>
-                          {format(new Date(order.dueDate), 'yyyy-MM-dd')}
-                        </span>
-                      </>
-                    )}
-
-                    <span className="text-muted-foreground">등록일</span>
-                    <span>{format(new Date(order.createdAt), 'yyyy-MM-dd HH:mm')}</span>
-
-                    {order.completedAt && (
-                      <>
-                        <span className="text-muted-foreground">완료일</span>
-                        <span>{format(new Date(order.completedAt), 'yyyy-MM-dd HH:mm')}</span>
-                      </>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 메모 */}
-              {order.memo && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-medium">메모</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm whitespace-pre-wrap">{order.memo}</p>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* 출고 · 배송 */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium flex items-center gap-2">
-                    <Truck className="h-4 w-4" />
-                    출고 · 배송
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-[100px_1fr] gap-y-3 text-sm">
-                    <span className="text-muted-foreground">출고 방식</span>
-                    <span className="font-medium">{order.shippingMethod ? SHIPPING_METHOD_LABELS[order.shippingMethod] : '-'}</span>
-
-                    <span className="text-muted-foreground">수취인</span>
-                    <span>
-                      {[order.shippingInfo?.recipientName, order.shippingInfo?.recipientPhone].filter(Boolean).join(' · ') || '-'}
-                    </span>
-
-                    <span className="text-muted-foreground">배송지</span>
-                    <span className="whitespace-pre-wrap">
-                      {[
-                        order.shippingInfo?.zipCode && `(${order.shippingInfo.zipCode})`,
-                        order.shippingInfo?.address,
-                        order.shippingInfo?.addressDetail,
-                      ].filter(Boolean).join(' ') || '-'}
-                    </span>
-
-                    {order.shippingInfo?.deliveryMessage && (
-                      <>
-                        <span className="text-muted-foreground">배송 메시지</span>
-                        <span className="whitespace-pre-wrap">{order.shippingInfo.deliveryMessage}</span>
-                      </>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 파일: 견적서(관리자) / 주문·디자인 파일 */}
-              <OrderFilesPanel
-                orderId={order.id}
-                clientCompanyId={order.clientCompany?.id}
-                quoteAction={
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      excelService
-                        .quote(order.id, order.orderNumber)
-                        .catch(() => toast.error('견적서 생성에 실패했습니다'))
-                    }
-                  >
-                    <FileSpreadsheet className="mr-1 h-4 w-4" />
-                    견적서 자동 생성
-                  </Button>
-                }
-              />
-
-              {/* 상태 변경 */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium">상태 변경</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {(['PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'] as OrderStatus[]).map(
-                      (status) => (
-                        <Button
-                          key={status}
-                          variant={order.status === status ? 'default' : 'outline'}
-                          size="sm"
-                          onClick={() => statusMutation.mutate({ id: order.id, status })}
-                          disabled={statusMutation.isPending}
-                        >
-                          {statusConfig[status].label}
-                        </Button>
-                      )
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* 작업 탭 - 칸반 보드 (WorkStatusPage와 동일한 KanbanBoard 사용) */}
-            <TabsContent value="work" className="mt-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
-                      작업 진행 보드
-                    </CardTitle>
-                    <Button size="sm" onClick={() => setIsAddWorkOrderOpen(true)}>
-                      <Plus className="mr-1 h-4 w-4" />
-                      작업 추가
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0 h-[500px]">
-                  <KanbanBoard orderId={orderId} />
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        </div>
-
-        {/* 우측 사이드바 */}
-        <div className="space-y-4">
-          {/* 주문 요약 */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium">주문 요약</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">총 작업 수</span>
-                <span className="font-medium">{order.workOrderCount || 0}건</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">총 수량</span>
-                <span className="font-medium">{totalQuantity.toLocaleString()} EA</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">완료 수량</span>
-                <span className="font-medium text-green-600">
-                  {completedQuantity.toLocaleString()} EA ({progressPercent}%)
-                </span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 고객 정보 */}
-          {order.customer && (
+        {/* 주문 정보 탭 — 넓은 화면에서 4열로 펼쳐 스크롤 최소화 */}
+        <TabsContent value="info" className="mt-4 space-y-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">고객 정보</CardTitle>
+                <CardTitle className="text-sm font-medium">기본 정보</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">고객명</span>
-                  <Link to={`/customers/${order.customer.id}`} className="font-medium text-primary hover:underline">
-                    {order.customer.name}
-                  </Link>
-                </div>
-                {order.customer.phone && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground flex items-center gap-1">
-                      <Phone className="h-3 w-3" /> 연락처
-                    </span>
-                    <span>{order.customer.phone}</span>
-                  </div>
+              <CardContent>
+                <dl className="grid grid-cols-[84px_1fr] gap-y-2 text-sm">
+                  <dt className="text-muted-foreground">회사 / 상호</dt>
+                  <dd className="min-w-0 break-words">{order.clientCompany?.displayName ?? '-'}</dd>
+                  <dt className="text-muted-foreground">주문 경로</dt>
+                  <dd>{order.orderSource ? ORDER_SOURCE_LABELS[order.orderSource] : '-'}</dd>
+                  <dt className="text-muted-foreground">주문일</dt>
+                  <dd>{order.orderDate ? formatDateTime(order.orderDate) : '-'}</dd>
+                  <dt className="text-muted-foreground">등록일</dt>
+                  <dd>{formatDateTime(order.createdAt)}</dd>
+                  {order.completedAt && (
+                    <>
+                      <dt className="text-muted-foreground">완료일</dt>
+                      <dd>{formatDateTime(order.completedAt)}</dd>
+                    </>
+                  )}
+                </dl>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">주문자</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {order.customer ? (
+                  <dl className="grid grid-cols-[84px_1fr] gap-y-2 text-sm">
+                    <dt className="text-muted-foreground">이름</dt>
+                    <dd>
+                      <Link to={`/customers/${order.customer.id}`} className="inline-flex items-center gap-1 text-primary hover:underline">
+                        {order.customer.name}
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    </dd>
+                    <dt className="flex items-center gap-1 text-muted-foreground"><Phone className="h-3 w-3" />연락처</dt>
+                    <dd>{order.customer.phone || '-'}</dd>
+                    <dt className="flex items-center gap-1 text-muted-foreground"><Mail className="h-3 w-3" />이메일</dt>
+                    <dd className="min-w-0 break-all">{order.customer.email || '-'}</dd>
+                  </dl>
+                ) : (
+                  <p className="text-sm text-muted-foreground">주문자 정보가 없습니다.</p>
                 )}
-                {order.customer.email && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground flex items-center gap-1">
-                      <Mail className="h-3 w-3" /> 이메일
-                    </span>
-                    <span className="truncate max-w-[140px]">{order.customer.email}</span>
-                  </div>
-                )}
-                {order.customer.address && (
-                  <div className="pt-2 border-t">
-                    <div className="text-muted-foreground flex items-center gap-1 mb-1">
-                      <MapPin className="h-3 w-3" /> 주소
-                    </div>
-                    <p className="text-xs">{order.customer.address}</p>
+                {order.memo && (
+                  <div className="mt-3 border-t pt-3">
+                    <div className="mb-1 text-xs text-muted-foreground">메모</div>
+                    <p className="whitespace-pre-wrap text-sm">{order.memo}</p>
                   </div>
                 )}
               </CardContent>
             </Card>
-          )}
 
-          {/* 일정 정보 */}
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm font-medium">
+                  <Truck className="h-4 w-4" />
+                  출고 · 배송
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid grid-cols-[84px_1fr] gap-y-2 text-sm">
+                  <dt className="text-muted-foreground">출고 방식</dt>
+                  <dd className="font-medium">{order.shippingMethod ? SHIPPING_METHOD_LABELS[order.shippingMethod] : '-'}</dd>
+                  <dt className="text-muted-foreground">수취인</dt>
+                  <dd>{[order.shippingInfo?.recipientName, order.shippingInfo?.recipientPhone].filter(Boolean).join(' · ') || '-'}</dd>
+                  <dt className="text-muted-foreground">배송지</dt>
+                  <dd className="min-w-0 whitespace-pre-wrap break-words">{shippingAddress || '-'}</dd>
+                  {order.shippingInfo?.deliveryMessage && (
+                    <>
+                      <dt className="text-muted-foreground">배송 메시지</dt>
+                      <dd className="whitespace-pre-wrap">{order.shippingInfo.deliveryMessage}</dd>
+                    </>
+                  )}
+                </dl>
+              </CardContent>
+            </Card>
+
+            {/* 품목 — 작업 보드 탭으로 가지 않아도 진행 상태를 바로 확인 */}
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                <CardTitle className="text-sm font-medium">품목 ({order.workOrders?.length ?? 0})</CardTitle>
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setIsAddWorkOrderOpen(true)}>
+                  <Plus className="mr-1 h-3 w-3" />
+                  추가
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {order.workOrders?.length ? (
+                  <ul className="max-h-56 space-y-1 overflow-y-auto text-sm">
+                    {order.workOrders.map((wo) => (
+                      <li key={wo.id}>
+                        <Link
+                          to={`/work-orders/${wo.id}`}
+                          className="flex items-center gap-2 rounded px-1.5 py-1 hover:bg-muted"
+                        >
+                          <span className="min-w-0 flex-1 truncate">{wo.orderName}</span>
+                          <span className="shrink-0 text-xs text-muted-foreground">{wo.quantity.toLocaleString()}개</span>
+                          <Badge variant={WORK_ORDER_STATUS[wo.status].variant} className="shrink-0 text-[11px]">
+                            {WORK_ORDER_STATUS[wo.status].label}
+                          </Badge>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">등록된 품목이 없습니다.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* 파일: 견적서(관리자) / 주문·디자인 파일 — 내부 2열 */}
+          <OrderFilesPanel
+            orderId={order.id}
+            clientCompanyId={order.clientCompany?.id}
+            quoteAction={
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  excelService
+                    .quote(order.id, order.orderNumber)
+                    .catch(() => toast.error('견적서 생성에 실패했습니다'))
+                }
+              >
+                <FileSpreadsheet className="mr-1 h-4 w-4" />
+                견적서 자동 생성
+              </Button>
+            }
+          />
+        </TabsContent>
+
+        {/* 작업 보드 탭 - 칸반 (WorkStatusPage와 동일한 KanbanBoard 사용) */}
+        <TabsContent value="work" className="mt-4">
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                <Clock className="h-4 w-4" />
-                일정
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              {order.orderDate && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">주문일</span>
-                  <span>{format(new Date(order.orderDate), 'MM.dd')}</span>
-                </div>
-              )}
-              {order.dueDate && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">출고 예정일</span>
-                  <span className={cn(
-                    "font-medium",
-                    new Date(order.dueDate) < new Date() && order.status !== 'COMPLETED' && "text-destructive"
-                  )}>
-                    {format(new Date(order.dueDate), 'MM.dd')}
-                  </span>
-                </div>
-              )}
-              {order.completedAt && (
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">완료일</span>
-                  <span className="text-green-600">{format(new Date(order.completedAt), 'MM.dd')}</span>
-                </div>
-              )}
+            <CardContent className="h-[calc(100vh-320px)] min-h-[480px] p-4">
+              <KanbanBoard orderId={orderId} />
             </CardContent>
           </Card>
-        </div>
-      </div>
-
+        </TabsContent>
+      </Tabs>
       {/* 작업 추가 다이얼로그 */}
       <AddWorkOrderDialog
         orderId={order.id}
         orderCustomerId={order.customer?.id}
+        orderDueDate={order.dueDate}
         open={isAddWorkOrderOpen}
         onOpenChange={setIsAddWorkOrderOpen}
       />

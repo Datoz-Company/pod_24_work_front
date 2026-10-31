@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import type { KanbanCard as KanbanCardType, KanbanColumn as KanbanColumnType } from '@/types'
+import { invalidateWorkData } from '@/lib/queryInvalidation'
 
 interface KanbanBoardProps {
   orderId?: number
@@ -56,7 +57,7 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<number | null>(null)
   const [isPeekOpen, setIsPeekOpen] = useState(false)
 
-  // 작업 전으로 되돌리기 다이얼로그 상태
+  // 대기중으로 되돌리기 다이얼로그 상태
   const [showResetDialog, setShowResetDialog] = useState(false)
   const [resetTargetCard, setResetTargetCard] = useState<KanbanCardType | null>(null)
 
@@ -118,14 +119,14 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
   const moveMutation = useMutation({
     mutationFn: kanbanService.moveCard,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kanban'] })
+      invalidateWorkData(queryClient)
     },
   })
 
   const startWorkMutation = useMutation({
     mutationFn: kanbanService.startWork,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kanban'] })
+      invalidateWorkData(queryClient)
     },
   })
 
@@ -133,9 +134,7 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
     mutationFn: ({ workOrderProcessId, status }: { workOrderProcessId: number; status: 'IN_PROGRESS' | 'COMPLETED' | 'NOT_STARTED' }) =>
       kanbanService.updateProcessStatus(workOrderProcessId, status),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kanban'] })
-      // 상세 시트에서도 최신 상태를 보여주기 위해 workOrder 쿼리도 무효화
-      queryClient.invalidateQueries({ queryKey: ['workOrder'] })
+      invalidateWorkData(queryClient)
     },
   })
 
@@ -143,10 +142,7 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
     mutationFn: kanbanService.resetAllProcesses,
     onSuccess: () => {
       // 모든 관련 쿼리 무효화하여 UI 즉시 갱신
-      queryClient.invalidateQueries({ queryKey: ['kanban'] })
-      queryClient.invalidateQueries({ queryKey: ['workOrder'] })
-      queryClient.invalidateQueries({ queryKey: ['order'] })
-      queryClient.invalidateQueries({ queryKey: ['orders'] })
+      invalidateWorkData(queryClient)
       toast.success('작업이 "대기중" 상태로 변경되었습니다')
       setShowResetDialog(false)
       setResetTargetCard(null)
@@ -339,7 +335,7 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
       return
     }
 
-    // "작업 전" 컬럼으로 드래그하는 경우: 다이얼로그 표시
+    // "대기중" 컬럼으로 드래그하는 경우: 다이얼로그 표시
     const isPendingColumn = overColumn.process.isSystem && overColumn.process.systemType === 'PENDING'
     if (isPendingColumn && isMiddleProcessCard) {
       // 다이얼로그 표시
@@ -348,7 +344,7 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
       return
     }
 
-    // 그 외의 경우 (예: 작업 전 → 작업 전 등)
+    // 그 외의 경우 (예: 대기중 → 대기중 등)
     moveMutation.mutate({
       workOrderId: activeCard.workOrderId,
       targetProcessId: overColumn.process.id,
@@ -387,9 +383,9 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
     )
   }
 
-  // 하이라이트 상태: 작업 전에서 드래그 중이거나, 미니 카드(완료된 공정) 드래그 중일 때
+  // 하이라이트 상태: 대기중에서 드래그 중이거나, 미니 카드(완료된 공정) 드래그 중일 때
   const shouldHighlightProcessGroup = (isDraggingFromPending || isDraggingMiniCard) && isOverProcessGroup
-  // 중간 공정 컬럼 하이라이트: 작업 전에서 드래그 중이거나, 미니 카드 드래그 중일 때
+  // 중간 공정 컬럼 하이라이트: 대기중에서 드래그 중이거나, 미니 카드 드래그 중일 때
   // (중간 공정 카드 드래그 중에는 하이라이트 안 함)
   const shouldHighlightMiddleColumns = isDraggingFromPending || isDraggingMiniCard
   // 작업 완료 컬럼 하이라이트: 중간 공정 카드 드래그 중일 때
@@ -410,7 +406,8 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <KanbanFilterBar filter={filter} onChange={setFilter} />
+      {/* 주문 상세의 보드(한 주문의 작업만)에는 필터가 필요 없음 */}
+      {!orderId && <KanbanFilterBar filter={filter} onChange={setFilter} />}
 
       {/* 스크롤바 숨김 스타일 */}
       <style>{`
@@ -520,7 +517,7 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
         onOpenChange={handlePeekClose}
       />
 
-      {/* 작업 전으로 되돌리기 다이얼로그 */}
+      {/* 대기중으로 되돌리기 다이얼로그 */}
       <AlertDialog open={showResetDialog} onOpenChange={handleResetDialogClose}>
         <AlertDialogContent>
           <AlertDialogHeader>

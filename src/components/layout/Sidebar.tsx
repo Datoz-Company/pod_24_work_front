@@ -28,6 +28,7 @@ const menuItems = [
   { path: '/products', label: '상품 관리', icon: Package },
   { path: '/options', label: '옵션 관리', icon: Sliders },
   { path: '/customers', label: '고객 관리', icon: Users },
+  { path: '/companies', label: '회사 관리', icon: Building2 },
 ]
 
 const getRoleLabel = (role?: string) => {

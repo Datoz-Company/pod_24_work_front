@@ -1,20 +1,16 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
-import { ko } from 'date-fns/locale'
 import { toast } from 'sonner'
 import {
   ArrowLeft,
   Trash2,
   Loader2,
   AlertTriangle,
-  Upload,
   ExternalLink,
   CheckCircle2,
   Circle,
   PlayCircle,
-  FileText,
   MoreHorizontal,
   Copy,
   Edit,
@@ -49,53 +45,37 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { workOrderService } from '@/services/workOrderService'
 import { kanbanService } from '@/services/kanbanService'
-import { attachmentService } from '@/services/attachmentService'
-import { FileUploader } from '@/components/features/attachment/FileUploader'
-import { cn } from '@/lib/utils'
+import { WorkOrderAttachments } from '@/components/features/attachment/WorkOrderAttachments'
+import { WorkOrderOptionsView } from '@/components/features/option/WorkOrderOptionsView'
+import { EditWorkOrderDialog } from '@/components/features/work-order/EditWorkOrderDialog'
+import { useCanViewQuotes } from '@/lib/permissions'
+import { WorkOrderMemoEditor } from '@/components/features/kanban/WorkOrderMemoEditor'
+import { SHIPPING_METHOD_LABELS } from '@/types'
+import { cn, isNotNil } from '@/lib/utils'
+import { toOptionRequest } from '@/lib/optionSnapshot'
 import type { ProcessStatus } from '@/types'
+import { PROCESS_STATUS, WORK_ORDER_STATUS } from '@/lib/status'
+import { formatDateTime, formatDueDate, isOverdue } from '@/lib/format'
+import { invalidateWorkData } from '@/lib/queryInvalidation'
 
-const statusConfig: Record<
-  string,
-  { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; color: string }
-> = {
-  PENDING: { label: '대기중', variant: 'secondary', color: 'bg-gray-500' },
-  IN_PROGRESS: { label: '진행중', variant: 'default', color: 'bg-blue-500' },
-  COMPLETED: { label: '완료', variant: 'outline', color: 'bg-green-500' },
-  REJECTED: { label: '반려', variant: 'destructive', color: 'bg-red-500' },
-}
+const statusConfig = WORK_ORDER_STATUS
 
 const processStatusConfig: Record<ProcessStatus, { label: string; icon: typeof Circle; color: string }> = {
-  NOT_STARTED: { label: '미착수', icon: Circle, color: 'text-gray-400' },
-  IN_PROGRESS: { label: '진행중', icon: PlayCircle, color: 'text-blue-500' },
-  COMPLETED: { label: '완료', icon: CheckCircle2, color: 'text-green-500' },
+  NOT_STARTED: { label: PROCESS_STATUS.NOT_STARTED.label, icon: Circle, color: 'text-gray-400' },
+  IN_PROGRESS: { label: PROCESS_STATUS.IN_PROGRESS.label, icon: PlayCircle, color: 'text-blue-500' },
+  COMPLETED: { label: PROCESS_STATUS.COMPLETED.label, icon: CheckCircle2, color: 'text-green-500' },
 }
 
 export function WorkOrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const canViewPrices = useCanViewQuotes()
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [showDuplicateConfirm, setShowDuplicateConfirm] = useState(false)
-  const [editFormData, setEditFormData] = useState({
-    orderName: '',
-    quantity: 1,
-    dueDate: '',
-    memo: '',
-  })
 
   const workOrderId = Number(id)
 
@@ -105,44 +85,15 @@ export function WorkOrderDetailPage() {
     enabled: !!workOrderId,
   })
 
-  const { data: attachments = [], isLoading: isAttachmentsLoading } = useQuery({
-    queryKey: ['attachments', workOrderId],
-    queryFn: () => attachmentService.getAttachments(workOrderId),
-    enabled: !!workOrderId,
-  })
-
-  const uploadMutation = useMutation({
-    mutationFn: (file: File) => attachmentService.upload(workOrderId, file),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['attachments', workOrderId] })
-    },
-  })
-
   const deleteMutation = useMutation({
     mutationFn: workOrderService.delete,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kanban'] })
-      queryClient.invalidateQueries({ queryKey: ['workOrders'] })
+      invalidateWorkData(queryClient)
       toast.success('작업이 삭제되었습니다')
       navigate('/work-status')
     },
     onError: () => {
       toast.error('작업 삭제에 실패했습니다')
-    },
-  })
-
-  const updateMutation = useMutation({
-    mutationFn: (data: { orderName: string; quantity: number; dueDate?: string; memo?: string }) =>
-      workOrderService.update(workOrderId, data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workOrder', workOrderId] })
-      queryClient.invalidateQueries({ queryKey: ['kanban'] })
-      queryClient.invalidateQueries({ queryKey: ['workOrders'] })
-      setShowEditDialog(false)
-      toast.success('작업이 수정되었습니다')
-    },
-    onError: () => {
-      toast.error('작업 수정에 실패했습니다')
     },
   })
 
@@ -160,11 +111,11 @@ export function WorkOrderDetailPage() {
         processIds: workOrder.processes
           .filter(p => !p.process.isSystem)
           .map(p => p.process.id),
+        options: (workOrder.options ?? []).map(toOptionRequest).filter(isNotNil),
       })
     },
     onSuccess: (newWorkOrder) => {
-      queryClient.invalidateQueries({ queryKey: ['kanban'] })
-      queryClient.invalidateQueries({ queryKey: ['workOrders'] })
+      invalidateWorkData(queryClient)
       setShowDuplicateConfirm(false)
       toast.success('작업이 복제되었습니다')
       navigate(`/work-orders/${newWorkOrder.id}`)
@@ -183,38 +134,12 @@ export function WorkOrderDetailPage() {
       status: ProcessStatus
     }) => kanbanService.updateProcessStatus(workOrderProcessId, status),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kanban'] })
-      queryClient.invalidateQueries({ queryKey: ['workOrder', workOrderId] })
+      invalidateWorkData(queryClient)
     },
   })
 
-  const handleFileUpload = async (file: File) => {
-    await uploadMutation.mutateAsync(file)
-  }
-
   const handleDeleteConfirm = () => {
     deleteMutation.mutate(workOrderId)
-  }
-
-  const handleOpenEditDialog = () => {
-    if (workOrder) {
-      setEditFormData({
-        orderName: workOrder.orderName,
-        quantity: workOrder.quantity,
-        dueDate: workOrder.dueDate ? workOrder.dueDate.split('T')[0] : '',
-        memo: workOrder.memo || '',
-      })
-      setShowEditDialog(true)
-    }
-  }
-
-  const handleEditSubmit = () => {
-    updateMutation.mutate({
-      orderName: editFormData.orderName,
-      quantity: editFormData.quantity,
-      dueDate: editFormData.dueDate || undefined,
-      memo: editFormData.memo || undefined,
-    })
   }
 
   const handleDuplicateConfirm = () => {
@@ -223,21 +148,6 @@ export function WorkOrderDetailPage() {
 
   const handleProcessStatusChange = (workOrderProcessId: number, newStatus: ProcessStatus) => {
     updateProcessStatusMutation.mutate({ workOrderProcessId, status: newStatus })
-  }
-
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return '-'
-    return format(new Date(dateString), 'yyyy-MM-dd HH:mm', { locale: ko })
-  }
-
-  const formatShortDate = (dateString?: string) => {
-    if (!dateString) return '-'
-    return format(new Date(dateString), 'MM.dd (EEE)', { locale: ko })
-  }
-
-  const isOverdue = (dueDate?: string) => {
-    if (!dueDate) return false
-    return new Date(dueDate) < new Date()
   }
 
   // 중간 공정만 필터링 (시스템 공정 제외)
@@ -299,6 +209,49 @@ export function WorkOrderDetailPage() {
     )
   }
 
+  // 상단·하단에 동일하게 노출하는 작업 액션 (긴 페이지에서 다시 올라가지 않도록)
+  const actions = (
+    <div className="flex items-center gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() =>
+          excelService
+            .workInstruction(workOrder.id, workOrder.orderNumber)
+            .catch(() => toast.error('작업 지시서 생성에 실패했습니다'))
+        }
+      >
+        <FileSpreadsheet className="mr-1 h-4 w-4" />
+        작업 지시서 엑셀
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm">
+            작업 옵션
+            <MoreHorizontal className="ml-1 h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => setShowDuplicateConfirm(true)}>
+            <Copy className="mr-2 h-4 w-4" />
+            작업 복제
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
+            <Edit className="mr-2 h-4 w-4" />
+            작업 수정
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-destructive"
+            onClick={() => setShowDeleteConfirm(true)}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            작업 삭제
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
+
   return (
     <div className="space-y-4">
       {/* 브레드크럼 */}
@@ -329,52 +282,14 @@ export function WorkOrderDetailPage() {
             )}
             {workOrder.customer && (
               <>
-                <span>고객명</span>
+                <span>주문자</span>
                 <span className="text-foreground">{workOrder.customer.name}</span>
               </>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              excelService
-                .workInstruction(workOrder.id, workOrder.orderNumber)
-                .catch(() => toast.error('작업 지시서 생성에 실패했습니다'))
-            }
-          >
-            <FileSpreadsheet className="mr-1 h-4 w-4" />
-            작업 지시서 엑셀
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                작업 옵션
-                <MoreHorizontal className="ml-1 h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setShowDuplicateConfirm(true)}>
-                <Copy className="mr-2 h-4 w-4" />
-                작업 복제
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleOpenEditDialog}>
-                <Edit className="mr-2 h-4 w-4" />
-                작업 수정
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="text-destructive"
-                onClick={() => setShowDeleteConfirm(true)}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                작업 삭제
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        {actions}
       </div>
 
       {/* 요약 카드 */}
@@ -438,7 +353,7 @@ export function WorkOrderDetailPage() {
                 "text-sm font-medium",
                 isOverdue(workOrder.dueDate) && workOrder.status !== 'COMPLETED' && "text-destructive"
               )}>
-                {workOrder.dueDate ? formatShortDate(workOrder.dueDate) : '-'}
+                {formatDueDate(workOrder.dueDate)}
               </div>
             </div>
 
@@ -472,12 +387,18 @@ export function WorkOrderDetailPage() {
                   </>
                 )}
 
+                <span className="text-muted-foreground">상호</span>
+                <span>{workOrder.order?.clientName ?? '-'}</span>
+
                 {workOrder.customer && (
                   <>
-                    <span className="text-muted-foreground">고객명</span>
+                    <span className="text-muted-foreground">주문자</span>
                     <span>{workOrder.customer.name}</span>
                   </>
                 )}
+
+                <span className="text-muted-foreground">출고 방식</span>
+                <span>{workOrder.order?.shippingMethod ? SHIPPING_METHOD_LABELS[workOrder.order.shippingMethod] : '-'}</span>
 
                 {workOrder.order && (
                   <>
@@ -498,18 +419,18 @@ export function WorkOrderDetailPage() {
                     <span className={cn(
                       isOverdue(workOrder.dueDate) && workOrder.status !== 'COMPLETED' && "text-destructive"
                     )}>
-                      {formatDate(workOrder.dueDate)}
+                      {formatDueDate(workOrder.dueDate)}
                     </span>
                   </>
                 )}
 
                 <span className="text-muted-foreground">생성일</span>
-                <span>{formatDate(workOrder.createdAt)}</span>
+                <span>{formatDateTime(workOrder.createdAt)}</span>
 
                 {workOrder.completedAt && (
                   <>
                     <span className="text-muted-foreground">완료일</span>
-                    <span>{formatDate(workOrder.completedAt)}</span>
+                    <span>{formatDateTime(workOrder.completedAt)}</span>
                   </>
                 )}
               </div>
@@ -517,80 +438,24 @@ export function WorkOrderDetailPage() {
           </Card>
 
           {/* 옵션 정보 */}
-          {workOrder.options && workOrder.options.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">옵션 정보</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="grid grid-cols-[100px_1fr] gap-y-2 text-sm">
-                  {workOrder.options.map((option) => {
-                    const snapshot = (() => {
-                      try {
-                        return JSON.parse(option.snapshot)
-                      } catch {
-                        return null
-                      }
-                    })()
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium">옵션 정보</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <WorkOrderOptionsView options={workOrder.options ?? []} showPrices={canViewPrices} />
+            </CardContent>
+          </Card>
 
-                    return snapshot?.attributes?.map(
-                      (attr: {
-                        attributeId: number
-                        attributeName: string
-                        previewType?: string
-                        selectedValues?: { valueId: number; value: string; customInput?: string }[]
-                        inputValue?: string
-                        isToggleOn?: boolean
-                      }) => {
-                        // 표시할 값 결정
-                        let displayValue: string | null = null
-
-                        if (attr.previewType === 'TOGGLE_BUTTON') {
-                          // 토글이 OFF이면 표시하지 않음
-                          if (!attr.isToggleOn) return null
-                          displayValue = 'ON'
-                        } else if (attr.previewType === 'INPUT_TEXT' || attr.previewType === 'INPUT_NUMBER') {
-                          // 입력값이 비어있으면 표시하지 않음
-                          if (!attr.inputValue || attr.inputValue.trim() === '') return null
-                          displayValue = attr.inputValue
-                        } else {
-                          // 일반 선택값
-                          if (!attr.selectedValues || attr.selectedValues.length === 0) return null
-                          displayValue = attr.selectedValues.map(v => (v.customInput ? `${v.value}: ${v.customInput}` : v.value)).join(', ')
-                        }
-
-                        return (
-                          <React.Fragment key={`${option.id}-${attr.attributeId}`}>
-                            <span className="text-muted-foreground">{attr.attributeName}</span>
-                            <span>{displayValue}</span>
-                          </React.Fragment>
-                        )
-                      }
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* 메모 */}
-          {workOrder.memo && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">메모</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="flex items-start gap-3 p-3 bg-muted/30 rounded-lg">
-                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
-                    <FileText className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm">{workOrder.memo}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {/* 메모 — 칸반 패널과 같은 인라인 편집기 */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium">메모</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <WorkOrderMemoEditor key={workOrder.id} workOrderId={workOrder.id} memo={workOrder.memo} />
+            </CardContent>
+          </Card>
         </div>
 
         {/* 우측: 공정 현황 + 첨부파일 + 관련 링크 */}
@@ -611,7 +476,8 @@ export function WorkOrderDetailPage() {
                     const StatusIcon = processStatusConfig[wop.status].icon
                     // 시스템 공정은 상태 변경 불가
                     const isSystemProcess = wop.process.isSystem
-                    const isEditable = workOrder.status === 'IN_PROGRESS' && !isSystemProcess
+                    // 작업 상태와 무관하게 변경 가능 — 완료된 작업도 미착수로 되돌릴 수 있어야 함
+                    const isEditable = !isSystemProcess
                     const isLast = index === allProcesses.length - 1
 
                     return (
@@ -642,10 +508,10 @@ export function WorkOrderDetailPage() {
                                   {wop.process.name}
                                 </span>
                                 {!isSystemProcess && wop.status === 'IN_PROGRESS' && (
-                                  <Badge className="h-5 text-[10px] bg-blue-500">진행중</Badge>
+                                  <Badge className="h-5 text-[10px] bg-blue-500">{PROCESS_STATUS.IN_PROGRESS.label}</Badge>
                                 )}
                                 {!isSystemProcess && wop.status === 'NOT_STARTED' && (
-                                  <Badge variant="outline" className="h-5 text-[10px]">대기중</Badge>
+                                  <Badge variant="outline" className="h-5 text-[10px]">{PROCESS_STATUS.NOT_STARTED.label}</Badge>
                                 )}
                               </div>
 
@@ -658,13 +524,13 @@ export function WorkOrderDetailPage() {
                                   }
                                   disabled={updateProcessStatusMutation.isPending}
                                 >
-                                  <SelectTrigger className="w-[70px] h-6 text-[10px] border-0 bg-transparent hover:bg-muted">
+                                  <SelectTrigger className="w-[84px] h-6 text-[10px] border-0 bg-transparent hover:bg-muted">
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="NOT_STARTED">미착수</SelectItem>
-                                    <SelectItem value="IN_PROGRESS">진행</SelectItem>
-                                    <SelectItem value="COMPLETED">완료</SelectItem>
+                                    {(Object.keys(PROCESS_STATUS) as ProcessStatus[]).map((value) => (
+                                      <SelectItem key={value} value={value}>{PROCESS_STATUS[value].label}</SelectItem>
+                                    ))}
                                   </SelectContent>
                                 </Select>
                               )}
@@ -673,12 +539,12 @@ export function WorkOrderDetailPage() {
                             {/* 완료 시간 */}
                             {wop.completedAt && (
                               <div className="text-xs text-muted-foreground mt-0.5">
-                                완료: {formatDate(wop.completedAt)}
+                                완료: {formatDateTime(wop.completedAt)}
                               </div>
                             )}
                             {wop.startedAt && wop.status === 'IN_PROGRESS' && (
                               <div className="text-xs text-muted-foreground mt-0.5">
-                                시작: {formatDate(wop.startedAt)}
+                                시작: {formatDateTime(wop.startedAt)}
                               </div>
                             )}
                           </div>
@@ -700,93 +566,10 @@ export function WorkOrderDetailPage() {
           {/* 첨부 파일 */}
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  첨부 파일
-                  {attachments.length > 0 && (
-                    <Badge variant="secondary" className="h-5 text-[10px]">
-                      {attachments.length}
-                    </Badge>
-                  )}
-                </CardTitle>
-                <FileUploader onUpload={handleFileUpload} isUploading={uploadMutation.isPending} compact />
-              </div>
+              <CardTitle className="text-sm font-medium">첨부 파일</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
-              {isAttachmentsLoading ? (
-                <div className="flex items-center justify-center py-4">
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                </div>
-              ) : attachments.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
-                  <Upload className="h-6 w-6 mb-2 opacity-50" />
-                  <p className="text-xs">첨부된 파일이 없습니다</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {/* 이미지 파일 - 썸네일 그리드 */}
-                  {attachments.filter(a => a.contentType?.startsWith('image/')).length > 0 && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {attachments
-                        .filter(a => a.contentType?.startsWith('image/'))
-                        .map((attachment) => (
-                          <a
-                            key={attachment.id}
-                            href={attachment.downloadUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="group relative aspect-square rounded-lg overflow-hidden border bg-muted hover:ring-2 hover:ring-primary transition-all"
-                          >
-                            <img
-                              src={attachment.thumbnailUrl || attachment.downloadUrl}
-                              alt={attachment.originalFilename}
-                              className="w-full h-full object-cover"
-                            />
-                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center p-1">
-                              <span className="text-white text-[10px] truncate w-full text-center">
-                                {attachment.originalFilename}
-                              </span>
-                              <span className="text-white/70 text-[9px]">
-                                {(attachment.fileSize / 1024).toFixed(0)}KB
-                              </span>
-                            </div>
-                          </a>
-                        ))}
-                    </div>
-                  )}
-
-                  {/* 기타 파일 - 리스트 */}
-                  {attachments.filter(a => !a.contentType?.startsWith('image/')).map((attachment) => {
-                    const ext = attachment.originalFilename.split('.').pop()?.toUpperCase() || 'FILE'
-                    const isPdf = attachment.contentType === 'application/pdf'
-
-                    return (
-                      <a
-                        key={attachment.id}
-                        href={attachment.downloadUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors group"
-                      >
-                        <div className={cn(
-                          "h-9 w-9 rounded flex items-center justify-center text-[10px] font-medium",
-                          isPdf ? "bg-red-100 text-red-600" : "bg-blue-100 text-blue-600"
-                        )}>
-                          {ext}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm truncate group-hover:text-primary">
-                            {attachment.originalFilename}
-                          </p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {(attachment.fileSize / 1024).toFixed(0)}KB · {format(new Date(attachment.createdAt), 'yyyy-MM-dd HH:mm')}
-                          </p>
-                        </div>
-                      </a>
-                    )
-                  })}
-                </div>
-              )}
+              <WorkOrderAttachments workOrderId={workOrder.id} />
             </CardContent>
           </Card>
 
@@ -831,6 +614,11 @@ export function WorkOrderDetailPage() {
         </div>
       </div>
 
+      {/* 하단 액션바 */}
+      <div className="sticky bottom-0 flex justify-end border-t bg-white/95 py-3 backdrop-blur">
+        {actions}
+      </div>
+
       {/* 삭제 확인 다이얼로그 */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent>
@@ -866,65 +654,8 @@ export function WorkOrderDetailPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* 수정 다이얼로그 */}
-      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>작업 수정</DialogTitle>
-            <DialogDescription>
-              작업의 기본 정보를 수정합니다.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="orderName">작업명</Label>
-              <Input
-                id="orderName"
-                value={editFormData.orderName}
-                onChange={(e) => setEditFormData((prev) => ({ ...prev, orderName: e.target.value }))}
-                placeholder="작업명을 입력하세요"
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="quantity">수량</Label>
-              <Input
-                id="quantity"
-                type="number"
-                min={1}
-                value={editFormData.quantity}
-                onChange={(e) => setEditFormData((prev) => ({ ...prev, quantity: parseInt(e.target.value) || 1 }))}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="dueDate">출고 예정일</Label>
-              <Input
-                id="dueDate"
-                type="date"
-                value={editFormData.dueDate}
-                onChange={(e) => setEditFormData((prev) => ({ ...prev, dueDate: e.target.value }))}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="memo">메모</Label>
-              <Textarea
-                id="memo"
-                value={editFormData.memo}
-                onChange={(e) => setEditFormData((prev) => ({ ...prev, memo: e.target.value }))}
-                placeholder="메모를 입력하세요"
-                rows={3}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditDialog(false)}>
-              취소
-            </Button>
-            <Button onClick={handleEditSubmit} disabled={updateMutation.isPending}>
-              {updateMutation.isPending ? '저장 중...' : '저장'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* 수정 다이얼로그 — 품명·수량·옵션·공정·출고 예정일 */}
+      <EditWorkOrderDialog workOrder={workOrder} open={showEditDialog} onOpenChange={setShowEditDialog} />
 
       {/* 복제 확인 다이얼로그 */}
       <AlertDialog open={showDuplicateConfirm} onOpenChange={setShowDuplicateConfirm}>
@@ -937,7 +668,7 @@ export function WorkOrderDetailPage() {
                   <strong>{workOrder.orderName}</strong> 작업을 복제하시겠습니까?
                 </p>
                 <p className="text-muted-foreground text-sm">
-                  동일한 상품, 수량, 공정 정보로 새 작업이 생성됩니다.
+                  동일한 상품, 수량, 옵션, 공정 정보로 새 작업이 생성됩니다.
                 </p>
               </div>
             </AlertDialogDescription>
