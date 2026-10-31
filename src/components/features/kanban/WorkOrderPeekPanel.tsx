@@ -1,8 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
-import { ko } from 'date-fns/locale'
 import { toast } from 'sonner'
 import {
   Trash2,
@@ -12,9 +10,11 @@ import {
   Hash,
   Loader2,
   AlertTriangle,
-  Paperclip,
   ExternalLink,
   X,
+  Building2,
+  Edit,
+  Truck,
 } from 'lucide-react'
 import {
   Select,
@@ -41,12 +41,17 @@ import {
   PeekPanelFooter,
 } from '@/components/ui/peek-panel'
 import { workOrderService } from '@/services/workOrderService'
+import { useCanViewQuotes } from '@/lib/permissions'
+import { SHIPPING_METHOD_LABELS } from '@/types'
 import { kanbanService } from '@/services/kanbanService'
-import { attachmentService } from '@/services/attachmentService'
-import { FileUploader } from '@/components/features/attachment/FileUploader'
-import { AttachmentList } from '@/components/features/attachment/AttachmentList'
+import { WorkOrderAttachments } from '@/components/features/attachment/WorkOrderAttachments'
+import { WorkOrderOptionsView } from '@/components/features/option/WorkOrderOptionsView'
+import { EditWorkOrderDialog } from '@/components/features/work-order/EditWorkOrderDialog'
 import { WorkOrderMemoEditor } from './WorkOrderMemoEditor'
 import type { ProcessStatus } from '@/types'
+import { PROCESS_STATUS, WORK_ORDER_STATUS } from '@/lib/status'
+import { formatDueDate, isOverdue } from '@/lib/format'
+import { invalidateWorkData } from '@/lib/queryInvalidation'
 
 interface WorkOrderPeekPanelProps {
   workOrderId: number | null
@@ -54,28 +59,18 @@ interface WorkOrderPeekPanelProps {
   onOpenChange: (open: boolean) => void
 }
 
-const statusConfig: Record<
-  string,
-  { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }
-> = {
-  PENDING: { label: '대기중', variant: 'secondary' },
-  IN_PROGRESS: { label: '작업 중', variant: 'default' },
-  COMPLETED: { label: '완료', variant: 'outline' },
-  REJECTED: { label: '반려', variant: 'destructive' },
-}
+const statusConfig = WORK_ORDER_STATUS
 
-const processStatusConfig: Record<ProcessStatus, { label: string; color: string }> = {
-  NOT_STARTED: { label: '미착수', color: 'bg-gray-100 text-gray-600' },
-  IN_PROGRESS: { label: '작업 중', color: 'bg-blue-100 text-blue-700' },
-  COMPLETED: { label: '작업 완료', color: 'bg-green-100 text-green-700' },
-}
+
 
 export function WorkOrderPeekPanel({
   workOrderId,
   open,
   onOpenChange,
 }: WorkOrderPeekPanelProps) {
+  const canViewPrices = useCanViewQuotes()
   const queryClient = useQueryClient()
+  const [showEditDialog, setShowEditDialog] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showProcessDeleteConfirm, setShowProcessDeleteConfirm] = useState(false)
   const [processToDelete, setProcessToDelete] = useState<{ id: number; name: string } | null>(null)
@@ -86,24 +81,10 @@ export function WorkOrderPeekPanel({
     enabled: !!workOrderId && open,
   })
 
-  const { data: attachments = [], isLoading: isAttachmentsLoading } = useQuery({
-    queryKey: ['attachments', workOrderId],
-    queryFn: () => attachmentService.getAttachments(workOrderId!),
-    enabled: !!workOrderId && open,
-  })
-
-  const uploadMutation = useMutation({
-    mutationFn: (file: File) => attachmentService.upload(workOrderId!, file),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['attachments', workOrderId] })
-    },
-  })
-
   const deleteMutation = useMutation({
     mutationFn: workOrderService.delete,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kanban'] })
-      queryClient.invalidateQueries({ queryKey: ['workOrders'] })
+      invalidateWorkData(queryClient)
       setShowDeleteConfirm(false)
       onOpenChange(false)
     },
@@ -118,16 +99,14 @@ export function WorkOrderPeekPanel({
       status: ProcessStatus
     }) => kanbanService.updateProcessStatus(workOrderProcessId, status),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kanban'] })
-      queryClient.invalidateQueries({ queryKey: ['workOrder', workOrderId] })
+      invalidateWorkData(queryClient)
     },
   })
 
   const deleteProcessMutation = useMutation({
     mutationFn: kanbanService.deleteWorkOrderProcess,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['kanban'] })
-      queryClient.invalidateQueries({ queryKey: ['workOrder', workOrderId] })
+      invalidateWorkData(queryClient)
       toast.success('공정이 삭제되었습니다')
       setShowProcessDeleteConfirm(false)
       setProcessToDelete(null)
@@ -136,10 +115,6 @@ export function WorkOrderPeekPanel({
       toast.error('공정 삭제에 실패했습니다')
     },
   })
-
-  const handleFileUpload = async (file: File) => {
-    await uploadMutation.mutateAsync(file)
-  }
 
   const handleDeleteConfirm = () => {
     if (workOrderId) {
@@ -163,16 +138,6 @@ export function WorkOrderPeekPanel({
     if (processToDelete) {
       deleteProcessMutation.mutate(processToDelete.id)
     }
-  }
-
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return '-'
-    return format(new Date(dateString), 'yyyy.MM.dd (EEE)', { locale: ko })
-  }
-
-  const isOverdue = (dueDate?: string) => {
-    if (!dueDate) return false
-    return new Date(dueDate) < new Date()
   }
 
   // 상위 주문 링크 breadcrumb
@@ -228,6 +193,13 @@ export function WorkOrderPeekPanel({
             <PeekPanelSection title="기본 정보">
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">상호</span>
+                  <span className="ml-auto text-sm font-medium">
+                    {workOrder.order?.clientName ?? '-'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
                   <Package className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm text-muted-foreground">상품</span>
                   <span className="ml-auto text-sm font-medium">
@@ -243,14 +215,14 @@ export function WorkOrderPeekPanel({
                 </div>
                 <div className="flex items-center gap-3">
                   <User className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">고객</span>
+                  <span className="text-sm text-muted-foreground">주문자</span>
                   <span className="ml-auto text-sm font-medium">
                     {workOrder.customer?.name ?? '-'}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">출고일</span>
+                  <span className="text-sm text-muted-foreground">출고 예정일</span>
                   <span
                     className={`ml-auto text-sm font-medium ${
                       isOverdue(workOrder.dueDate) && workOrder.status !== 'COMPLETED'
@@ -258,10 +230,17 @@ export function WorkOrderPeekPanel({
                         : ''
                     }`}
                   >
-                    {formatDate(workOrder.dueDate)}
+                    {formatDueDate(workOrder.dueDate)}
                     {isOverdue(workOrder.dueDate) && workOrder.status !== 'COMPLETED' && (
                       <span className="ml-1 text-xs">(지연)</span>
                     )}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Truck className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">출고 방식</span>
+                  <span className="ml-auto text-sm font-medium">
+                    {workOrder.order?.shippingMethod ? SHIPPING_METHOD_LABELS[workOrder.order.shippingMethod] : '-'}
                   </span>
                 </div>
               </div>
@@ -279,10 +258,10 @@ export function WorkOrderPeekPanel({
                   .filter((wop) => !wop.process.isSystem)
                   .sort((a, b) => a.displayOrder - b.displayOrder)
                   .map((wop) => {
-                    const isEditable = workOrder.status === 'IN_PROGRESS'
-
-                    // 시스템 공정은 삭제 불가 (이미 필터링되어 있지만 안전장치)
+                    // 시스템 공정은 변경·삭제 불가 (이미 필터링되어 있지만 안전장치)
+                    // 작업 상태와 무관하게 변경 가능 — 완료된 작업도 미착수로 되돌릴 수 있어야 함
                     const isSystemProcess = wop.process.isSystem
+                    const isEditable = !isSystemProcess
 
                     return (
                       <div
@@ -304,26 +283,26 @@ export function WorkOrderPeekPanel({
                             }
                             disabled={updateProcessStatusMutation.isPending}
                           >
-                            <SelectTrigger className="w-[100px] h-8 text-xs">
+                            <SelectTrigger className="w-[116px] h-8 text-xs whitespace-nowrap">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="NOT_STARTED">
                                 <span className="flex items-center gap-2">
                                   <span className="h-2 w-2 rounded-full bg-gray-400" />
-                                  미착수
+                                  {PROCESS_STATUS.NOT_STARTED.label}
                                 </span>
                               </SelectItem>
                               <SelectItem value="IN_PROGRESS">
                                 <span className="flex items-center gap-2">
                                   <span className="h-2 w-2 rounded-full bg-blue-500" />
-                                  작업 중
+                                  {PROCESS_STATUS.IN_PROGRESS.label}
                                 </span>
                               </SelectItem>
                               <SelectItem value="COMPLETED">
                                 <span className="flex items-center gap-2">
                                   <span className="h-2 w-2 rounded-full bg-green-500" />
-                                  작업 완료
+                                  {PROCESS_STATUS.COMPLETED.label}
                                 </span>
                               </SelectItem>
                             </SelectContent>
@@ -331,9 +310,9 @@ export function WorkOrderPeekPanel({
                         ) : (
                           <Badge
                             variant="outline"
-                            className={processStatusConfig[wop.status].color}
+                            className={PROCESS_STATUS[wop.status].badgeClass}
                           >
-                            {processStatusConfig[wop.status].label}
+                            {PROCESS_STATUS[wop.status].label}
                           </Badge>
                         )}
                         {/* 공정 삭제 버튼 (시스템 공정 제외) */}
@@ -360,155 +339,34 @@ export function WorkOrderPeekPanel({
             {/* 옵션 정보 */}
             {workOrder.options && workOrder.options.length > 0 && (
               <PeekPanelSection title="옵션" className="border-t">
-                <div className="divide-y">
-                  {workOrder.options.map((option, index) => {
-                    const snapshot = (() => {
-                      try {
-                        return JSON.parse(option.snapshot)
-                      } catch {
-                        return null
-                      }
-                    })()
-                    const optionName = snapshot?.optionName
-
-                    return (
-                      <div
-                        key={option.id ?? index}
-                        className="py-3 first:pt-0 last:pb-0"
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium">{optionName}</span>
-                          <span className="text-xs text-muted-foreground">
-                            {option.optionCount}개 · ₩{option.optionTotalAmount.toLocaleString()}
-                          </span>
-                        </div>
-                        {snapshot?.attributes && snapshot.attributes.length > 0 && (
-                          <div className="space-y-1.5">
-                            {snapshot.attributes.map(
-                              (attr: {
-                                attributeId: number
-                                attributeName: string
-                                previewType?: string
-                                selectedValues?: {
-                                  valueId: number
-                                  value: string
-                                  price: number
-                                  customInput?: string
-                                }[]
-                                inputValue?: string
-                                isToggleOn?: boolean
-                              }) => {
-                                // 표시할 값이 없는 경우 (빈 선택, 빈 입력, 토글 OFF) 건너뛰기
-                                const hasSelectedValues = attr.selectedValues && attr.selectedValues.length > 0
-                                const hasInputValue = attr.inputValue && attr.inputValue.trim() !== ''
-                                const isToggleOn = attr.isToggleOn === true
-
-                                // TOGGLE_BUTTON이 OFF인 경우 표시하지 않음
-                                if (attr.previewType === 'TOGGLE_BUTTON' && !isToggleOn) {
-                                  return null
-                                }
-
-                                // 선택된 값도 없고, 입력값도 없으면 건너뛰기
-                                if (!hasSelectedValues && !hasInputValue && attr.previewType !== 'TOGGLE_BUTTON') {
-                                  return null
-                                }
-
-                                return (
-                                  <div
-                                    key={attr.attributeId}
-                                    className="flex items-start gap-2 text-xs"
-                                  >
-                                    <span className="text-muted-foreground min-w-[60px]">
-                                      {attr.attributeName}:
-                                    </span>
-                                    <div className="flex flex-wrap gap-1">
-                                      {/* TOGGLE_BUTTON: ON 상태 표시 */}
-                                      {attr.previewType === 'TOGGLE_BUTTON' && isToggleOn && (
-                                        <Badge variant="default" className="text-xs font-normal">
-                                          ON
-                                        </Badge>
-                                      )}
-                                      {/* INPUT_TEXT, INPUT_NUMBER: 입력값 표시 */}
-                                      {(attr.previewType === 'INPUT_TEXT' || attr.previewType === 'INPUT_NUMBER') && hasInputValue && (
-                                        <Badge variant="secondary" className="text-xs font-normal">
-                                          {attr.inputValue}
-                                        </Badge>
-                                      )}
-                                      {/* 일반 선택값 표시 (SELECT_BOX, RADIO_BUTTON, CHECK_BOX) */}
-                                      {hasSelectedValues && attr.selectedValues?.map(
-                                        (val: {
-                                          valueId: number
-                                          value: string
-                                          price: number
-                                          customInput?: string
-                                        }) => (
-                                          <Badge
-                                            key={val.valueId}
-                                            variant="secondary"
-                                            className="text-xs font-normal"
-                                          >
-                                            {val.value}
-                                            {val.customInput && `: ${val.customInput}`}
-                                            {val.price > 0 && (
-                                              <span className="ml-1 text-muted-foreground">
-                                                +₩{val.price.toLocaleString()}
-                                              </span>
-                                            )}
-                                          </Badge>
-                                        )
-                                      )}
-                                    </div>
-                                  </div>
-                                )
-                              }
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
+                {/* 가격은 관리자에게만 (작업 현황은 직원도 보는 화면) */}
+                <WorkOrderOptionsView options={workOrder.options} showPrices={canViewPrices} />
               </PeekPanelSection>
             )}
 
             {/* 첨부파일 */}
             <PeekPanelSection title="첨부파일" className="border-t">
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Paperclip className="h-4 w-4 text-muted-foreground" />
-                  {attachments.length > 0 && (
-                    <Badge variant="secondary" className="h-5 px-1.5 text-xs">
-                      {attachments.length}
-                    </Badge>
-                  )}
-                </div>
-                <FileUploader
-                  onUpload={handleFileUpload}
-                  isUploading={uploadMutation.isPending}
-                />
-                <AttachmentList
-                  workOrderId={workOrderId!}
-                  attachments={attachments}
-                  isLoading={isAttachmentsLoading}
-                />
-              </div>
+              <WorkOrderAttachments workOrderId={workOrder.id} />
             </PeekPanelSection>
 
-            {/* 하단 삭제 버튼 */}
+            {/* 하단 액션 — 작업 상세와 같은 수정/삭제 */}
             <PeekPanelFooter>
-              <Button
-                onClick={() => setShowDeleteConfirm(true)}
-                variant="destructive"
-                className="w-full gap-2"
-                size="sm"
-              >
-                <Trash2 className="h-4 w-4" />
-                작업지시서 삭제
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={() => setShowEditDialog(true)} variant="outline" className="flex-1 gap-2" size="sm">
+                  <Edit className="h-4 w-4" />
+                  작업 수정
+                </Button>
+                <Button onClick={() => setShowDeleteConfirm(true)} variant="destructive" className="flex-1 gap-2" size="sm">
+                  <Trash2 className="h-4 w-4" />
+                  작업 삭제
+                </Button>
+              </div>
             </PeekPanelFooter>
           </>
         )}
       </PeekPanel>
+
+      {workOrder && <EditWorkOrderDialog workOrder={workOrder} open={showEditDialog} onOpenChange={setShowEditDialog} />}
 
       {/* 작업지시서 삭제 확인 다이얼로그 */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>

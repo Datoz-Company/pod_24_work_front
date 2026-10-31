@@ -53,6 +53,38 @@ export function getCategories(products: readonly Product[]): string[] {
   })
 }
 
+/**
+ * 품목의 작업명: 품명(직접 입력) → 상품명 순.
+ *
+ * @param {OrderItemFormData} item - 품목
+ * @param {readonly Product[]} products - 상품 목록
+ * @returns {string} 작업명 (상품 미선택 시 빈 문자열)
+ */
+export function getOrderItemLabel(item: OrderItemFormData, products: readonly Product[]): string {
+  if (item.itemName.trim()) return item.itemName.trim()
+  return products.find((p) => p.id === item.productId)?.name ?? ''
+}
+
+/**
+ * 품목 목록을 검증합니다 — 상품 선택, 상품의 공정 설정 여부.
+ *
+ * @param {readonly OrderItemFormData[]} items - 품목 목록
+ * @param {readonly Product[]} products - 상품 목록 (공정 포함)
+ * @returns {string | null} 오류 메시지, 문제가 없으면 null
+ */
+export function validateOrderItems(items: readonly OrderItemFormData[], products: readonly Product[]): string | null {
+  for (const [index, item] of items.entries()) {
+    if (!item.productId) {
+      return `품목 ${index + 1}의 상품을 선택해주세요.`
+    }
+    const product = products.find((p) => p.id === item.productId)
+    if (!product?.processes?.some((p) => !p.isSystem)) {
+      return `"${product?.name}" 상품에 공정이 설정되어 있지 않습니다. 상품별 작업 공정 관리에서 먼저 설정하세요.`
+    }
+  }
+  return null
+}
+
 interface OrderItemCardProps {
   item: OrderItemFormData
   index: number
@@ -60,9 +92,11 @@ interface OrderItemCardProps {
   canDelete: boolean
   onChange: (patch: Partial<OrderItemFormData>) => void
   onRemove: () => void
+  /** 상품 변경 불가 (이미 생성된 작업 수정 시 — 공정·옵션 구성이 상품에 묶여 있음) */
+  lockProduct?: boolean
 }
 
-export function OrderItemCard({ item, index, products, canDelete, onChange, onRemove }: OrderItemCardProps) {
+export function OrderItemCard({ item, index, products, canDelete, onChange, onRemove, lockProduct = false }: OrderItemCardProps) {
   const categories = useMemo(() => getCategories(products), [products])
   const productsInCategory = useMemo(
     () => products.filter((p) => (p.category?.trim() || UNCATEGORIZED) === item.category),
@@ -103,7 +137,7 @@ export function OrderItemCard({ item, index, products, canDelete, onChange, onRe
         onClick={() => onChange({ isExpanded: !item.isExpanded })}
       >
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="text-sm font-medium">품목 {index + 1}</span>
+          <span className="text-sm font-medium">{lockProduct ? '품목' : `품목 ${index + 1}`}</span>
           {selectedProduct && <Badge variant="secondary" className="text-[10px]">{selectedProduct.name}</Badge>}
           {item.itemName && <span className="truncate text-sm text-muted-foreground">{item.itemName}</span>}
           {selectedProduct && <span className="text-xs text-muted-foreground">· {item.quantity}개</span>}
@@ -131,7 +165,7 @@ export function OrderItemCard({ item, index, products, canDelete, onChange, onRe
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label className="text-xs">상품 종류 *</Label>
-              <Select value={item.category} onValueChange={handleCategoryChange}>
+              <Select value={item.category} onValueChange={handleCategoryChange} disabled={lockProduct}>
                 <SelectTrigger>
                   <SelectValue placeholder="상품 종류 선택" />
                 </SelectTrigger>
@@ -147,7 +181,7 @@ export function OrderItemCard({ item, index, products, canDelete, onChange, onRe
               <Select
                 value={item.productId ? String(item.productId) : ''}
                 onValueChange={(v) => handleProductChange(Number(v))}
-                disabled={!item.category}
+                disabled={!item.category || lockProduct}
               >
                 <SelectTrigger>
                   <SelectValue placeholder={item.category ? '상품 선택' : '상품 종류를 먼저 선택하세요'} />

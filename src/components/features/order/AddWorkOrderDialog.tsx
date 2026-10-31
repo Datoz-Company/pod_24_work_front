@@ -1,51 +1,50 @@
-import { useState, useEffect } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { format } from 'date-fns'
-import { productService } from '@/services/productService'
-import { workOrderService } from '@/services/workOrderService'
+import { useEffect, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { Loader2, Plus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { productService } from '@/services/productService'
+import { workOrderService } from '@/services/workOrderService'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import type { WorkOrderCreateRequest } from '@/types'
-import { toast } from 'sonner'
+  OrderItemCard,
+  createEmptyOrderItem,
+  getOrderItemLabel,
+  validateOrderItems,
+  type OrderItemFormData,
+} from './OrderItemCard'
+import { invalidateWorkData } from '@/lib/queryInvalidation'
 
 interface AddWorkOrderDialogProps {
   orderId: number
   orderCustomerId?: number
+  /** 주문의 출고 예정일 — 추가하는 작업에 그대로 적용 */
+  orderDueDate?: string
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
+/**
+ * 기존 주문에 품목(작업) 추가
+ * 주문 등록 화면과 같은 품목 카드(상품 종류 → 상품, 품명, 옵션, 공정, 수량)를 사용
+ */
 export function AddWorkOrderDialog({
   orderId,
   orderCustomerId,
+  orderDueDate,
   open,
   onOpenChange,
 }: AddWorkOrderDialogProps) {
   const queryClient = useQueryClient()
-  const [formData, setFormData] = useState<Partial<WorkOrderCreateRequest>>({
-    orderName: '',
-    productId: 0,
-    quantity: 1,
-    dueDate: undefined,
-    orderId: orderId,
-    customerId: orderCustomerId,
-  })
-  const [showNoProcessWarning, setShowNoProcessWarning] = useState(false)
+  const [items, setItems] = useState<OrderItemFormData[]>([createEmptyOrderItem()])
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const { data: products = [] } = useQuery({
     queryKey: ['products', 'with-processes'],
@@ -53,194 +52,83 @@ export function AddWorkOrderDialog({
   })
 
   useEffect(() => {
-    setFormData((prev) => ({
-      ...prev,
-      orderId: orderId,
-      customerId: orderCustomerId,
-    }))
-  }, [orderId, orderCustomerId])
+    if (open) setItems([createEmptyOrderItem()])
+  }, [open])
 
-  const createMutation = useMutation({
-    mutationFn: (data: WorkOrderCreateRequest) => workOrderService.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['orders'] })
-      queryClient.invalidateQueries({ queryKey: ['order', orderId] })
-      queryClient.invalidateQueries({ queryKey: ['kanban'] })
-      toast.success('작업이 추가되었습니다.')
-      onOpenChange(false)
-      resetForm()
-    },
-    onError: (error: Error) => {
-      if (error.message.includes('공정')) {
-        setShowNoProcessWarning(true)
-      } else {
-        toast.error('작업 추가에 실패했습니다.')
-      }
-    },
-  })
-
-  const resetForm = () => {
-    setFormData({
-      orderName: '',
-      productId: 0,
-      quantity: 1,
-      dueDate: undefined,
-      orderId: orderId,
-      customerId: orderCustomerId,
-    })
-    setShowNoProcessWarning(false)
+  const updateItem = (key: string, patch: Partial<OrderItemFormData>) => {
+    setItems((prev) => prev.map((item) => (item.key === key ? { ...item, ...patch } : item)))
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const addItem = () => {
+    setItems((prev) => [...prev.map((item) => ({ ...item, isExpanded: false })), createEmptyOrderItem()])
+  }
 
-    const selectedProduct = products.find((p) => p.id === formData.productId)
-    if (
-      selectedProduct &&
-      (!selectedProduct.processes || selectedProduct.processes.length === 0)
-    ) {
-      setShowNoProcessWarning(true)
+  const handleSubmit = async () => {
+    const error = validateOrderItems(items, products)
+    if (error) {
+      toast.error(error)
       return
     }
-
-    const requestData: WorkOrderCreateRequest = {
-      orderName: formData.orderName!,
-      productId: formData.productId!,
-      customerId: formData.customerId,
-      orderId: formData.orderId,
-      quantity: formData.quantity!,
-      dueDate: formData.dueDate,
-      memo: '',
-    }
-
-    createMutation.mutate(requestData)
-  }
-
-  const handleProductChange = (value: string) => {
-    const productId = Number(value)
-    setFormData({ ...formData, productId })
-
-    const selectedProduct = products.find((p) => p.id === productId)
-    if (
-      selectedProduct &&
-      (!selectedProduct.processes || selectedProduct.processes.length === 0)
-    ) {
-      setShowNoProcessWarning(true)
-    } else {
-      setShowNoProcessWarning(false)
+    setIsSubmitting(true)
+    try {
+      for (const item of items) {
+        await workOrderService.create({
+          orderName: getOrderItemLabel(item, products),
+          productId: item.productId,
+          customerId: orderCustomerId,
+          orderId,
+          quantity: item.quantity,
+          dueDate: orderDueDate,
+          options: item.options.length > 0 ? item.options : undefined,
+          processIds: item.processIds.length > 0 ? item.processIds : undefined,
+        })
+      }
+      invalidateWorkData(queryClient)
+      toast.success(`품목 ${items.length}건을 추가했습니다.`)
+      onOpenChange(false)
+    } catch (e) {
+      console.error(e)
+      toast.error('작업 추가에 실패했습니다.')
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>작업 추가</DialogTitle>
+          <DialogTitle>품목 추가</DialogTitle>
+          <DialogDescription>추가한 품목은 각각 작업으로 생성되어 작업 현황에 표시됩니다.</DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="productId">상품 *</Label>
-            <Select
-              value={formData.productId ? String(formData.productId) : ''}
-              onValueChange={handleProductChange}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="상품을 선택하세요" />
-              </SelectTrigger>
-              <SelectContent>
-                {products.map((product) => (
-                  <SelectItem key={product.id} value={String(product.id)}>
-                    {product.name}
-                    {(!product.processes || product.processes.length === 0) && (
-                      <span className="ml-2 text-xs text-destructive">
-                        (공정 미설정)
-                      </span>
-                    )}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {showNoProcessWarning && (
-              <p className="text-sm text-destructive">
-                선택한 상품에 공정이 설정되어 있지 않습니다.
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="orderName">작업명 *</Label>
-            <Input
-              id="orderName"
-              value={formData.orderName}
-              onChange={(e) =>
-                setFormData({ ...formData, orderName: e.target.value })
-              }
-              placeholder="작업명을 입력하세요"
-              required
+        <div className="space-y-3">
+          {items.map((item, index) => (
+            <OrderItemCard
+              key={item.key}
+              item={item}
+              index={index}
+              products={products}
+              canDelete={items.length > 1}
+              onChange={(patch) => updateItem(item.key, patch)}
+              onRemove={() => setItems((prev) => prev.filter((i) => i.key !== item.key))}
             />
-          </div>
+          ))}
+          <Button type="button" variant="outline" size="sm" className="w-full" onClick={addItem}>
+            <Plus className="mr-1 h-4 w-4" />
+            품목 추가
+          </Button>
+        </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="quantity">수량 *</Label>
-            <Input
-              id="quantity"
-              type="number"
-              min={1}
-              value={formData.quantity}
-              onChange={(e) =>
-                setFormData({ ...formData, quantity: Number(e.target.value) })
-              }
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="dueDate">납기일</Label>
-            <Input
-              id="dueDate"
-              type="date"
-              value={
-                formData.dueDate
-                  ? format(new Date(formData.dueDate), 'yyyy-MM-dd')
-                  : ''
-              }
-              onChange={(e) =>
-                setFormData({
-                  ...formData,
-                  dueDate: e.target.value
-                    ? new Date(e.target.value).toISOString()
-                    : undefined,
-                })
-              }
-            />
-          </div>
-
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                onOpenChange(false)
-                resetForm()
-              }}
-              disabled={createMutation.isPending}
-            >
-              취소
-            </Button>
-            <Button
-              type="submit"
-              disabled={
-                createMutation.isPending ||
-                !formData.productId ||
-                !formData.orderName ||
-                showNoProcessWarning
-              }
-            >
-              {createMutation.isPending ? '추가 중...' : '작업 추가'}
-            </Button>
-          </DialogFooter>
-        </form>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+            취소
+          </Button>
+          <Button onClick={handleSubmit} disabled={isSubmitting}>
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {items.length}건 추가
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

@@ -5,6 +5,7 @@ import { Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { workOrderService } from '@/services/workOrderService'
+import { invalidateWorkData } from '@/lib/queryInvalidation'
 
 const URL_PATTERN = /(https?:\/\/[^\s]+)/g
 
@@ -46,8 +47,7 @@ export function WorkOrderMemoEditor({ workOrderId, memo }: WorkOrderMemoEditorPr
   const saveMutation = useMutation({
     mutationFn: (value: string) => workOrderService.update(workOrderId, { memo: value }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workOrder', workOrderId] })
-      queryClient.invalidateQueries({ queryKey: ['kanban'] })
+      invalidateWorkData(queryClient)
       toast.success('메모를 저장했습니다')
       setIsEditing(false)
     },

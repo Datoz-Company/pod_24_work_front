@@ -37,7 +37,7 @@ export function ProductProcessesPage() {
     },
   })
 
-  // 시스템 공정 ID 목록 (작업 전, 작업 완료)
+  // 시스템 공정 ID 목록 (대기중, 작업 완료)
   const systemProcessIds = allProcesses
     .filter((p) => p.isSystem)
     .map((p) => p.id)
@@ -47,7 +47,7 @@ export function ProductProcessesPage() {
     // 기존 공정 + 시스템 공정 필수 포함
     const productProcessIds = product.processes?.map((p) => p.id) || []
     const mergedIds = [...new Set([...systemProcessIds, ...productProcessIds])]
-    // 시스템 공정 순서대로 정렬 (작업 전이 첫 번째, 작업 완료가 마지막)
+    // 시스템 공정 순서대로 정렬 (대기중이 첫 번째, 작업 완료가 마지막)
     const sortedIds = mergedIds.sort((a, b) => {
       const processA = allProcesses.find((p) => p.id === a)
       const processB = allProcesses.find((p) => p.id === b)

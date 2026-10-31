@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Edit, Trash2, Search, Sliders, X } from 'lucide-react'
+import { Plus, Edit, Trash2, Search, Sliders, X, Pencil } from 'lucide-react'
+import { toast } from 'sonner'
 import { productService } from '@/services/productService'
 import { optionService } from '@/services/optionService'
 import { Button } from '@/components/ui/button'
@@ -23,6 +24,18 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { CategoryCombobox } from '@/components/features/product/CategoryCombobox'
+import { getCategories, UNCATEGORIZED } from '@/components/features/order/OrderItemCard'
 import type { Product, ProductCreateRequest } from '@/types'
 import type { Option, ProductOptionItem } from '@/types/option'
 
@@ -33,6 +46,9 @@ export function ProductsPage() {
   const [isOptionDialogOpen, setIsOptionDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [selectedProductForOptions, setSelectedProductForOptions] = useState<Product | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null)
+  const [renameTarget, setRenameTarget] = useState<string | null>(null)
+  const [renameTo, setRenameTo] = useState('')
   const [formData, setFormData] = useState<ProductCreateRequest>({
     name: '',
     category: '',
@@ -46,6 +62,23 @@ export function ProductsPage() {
   })
 
   const products = response?.content || []
+
+  // 종류 목록은 검색과 무관하게 전체 상품 기준
+  const { data: allProducts = [] } = useQuery({
+    queryKey: ['products', 'all'],
+    queryFn: productService.getAll,
+  })
+  const categories = useMemo(() => getCategories(allProducts).filter((c) => c !== UNCATEGORIZED), [allProducts])
+
+  // 상품 종류별 묶음 (미분류는 마지막)
+  const groupedProducts = useMemo(() => {
+    const groups = new Map<string, Product[]>()
+    for (const category of getCategories(products)) groups.set(category, [])
+    for (const product of products) {
+      groups.get(product.category?.trim() || UNCATEGORIZED)?.push(product)
+    }
+    return [...groups.entries()]
+  }, [products])
 
   // 전역 옵션 목록 조회
   const { data: allOptions = [] } = useQuery({
@@ -82,7 +115,20 @@ export function ProductsPage() {
     mutationFn: productService.delete,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] })
+      setDeleteTarget(null)
+      toast.success('상품을 삭제했습니다.')
     },
+    onError: () => toast.error('상품 삭제에 실패했습니다.'),
+  })
+
+  const renameMutation = useMutation({
+    mutationFn: ({ from, to }: { from: string; to: string }) => productService.renameCategory(from, to),
+    onSuccess: (count) => {
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      setRenameTarget(null)
+      toast.success(`상품 ${count}개의 종류를 변경했습니다.`)
+    },
+    onError: () => toast.error('상품 종류 변경에 실패했습니다.'),
   })
 
   // 상품 옵션 설정 Mutation
@@ -127,12 +173,6 @@ export function ProductsPage() {
       updateMutation.mutate({ id: editingProduct.id, data: formData })
     } else {
       createMutation.mutate(formData)
-    }
-  }
-
-  const handleDelete = (id: number) => {
-    if (window.confirm('이 상품을 삭제하시겠습니까?')) {
-      deleteMutation.mutate(id)
     }
   }
 
@@ -217,7 +257,7 @@ export function ProductsPage() {
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="상품명, 카테고리로 검색"
+            placeholder="상품명, 상품 종류로 검색"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9"
@@ -233,52 +273,59 @@ export function ProductsPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>상품명</TableHead>
-                <TableHead>카테고리</TableHead>
                 <TableHead>설명</TableHead>
                 <TableHead className="w-32">작업</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {products.map((product) => (
-                <TableRow key={product.id}>
-                  <TableCell className="font-medium">{product.name}</TableCell>
-                  <TableCell>{product.category || '-'}</TableCell>
-                  <TableCell className="max-w-xs truncate">
-                    {product.description || '-'}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openOptionDialog(product)}
-                        title="옵션 설정"
-                      >
-                        <Sliders className="h-4 w-4 text-blue-600" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openEditDialog(product)}
-                        title="수정"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDelete(product.id)}
-                        title="삭제"
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
+              {groupedProducts.map(([category, items]) => (
+                <Fragment key={category}>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableCell colSpan={3} className="py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold">{category}</span>
+                        <Badge variant="secondary">{items.length}</Badge>
+                        {category !== UNCATEGORIZED && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-muted-foreground"
+                            onClick={() => {
+                              setRenameTarget(category)
+                              setRenameTo(category)
+                            }}
+                          >
+                            <Pencil className="mr-1 h-3 w-3" />
+                            종류 이름 변경
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                  {items.map((product) => (
+                    <TableRow key={product.id}>
+                      <TableCell className="pl-6 font-medium">{product.name}</TableCell>
+                      <TableCell className="max-w-xs truncate">{product.description || '-'}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon" onClick={() => openOptionDialog(product)} title="옵션 설정" aria-label="옵션 설정">
+                            <Sliders className="h-4 w-4 text-blue-600" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => openEditDialog(product)} title="수정" aria-label="수정">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(product)} title="삭제" aria-label="삭제">
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </Fragment>
               ))}
               {products.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground">
+                  <TableCell colSpan={3} className="text-center text-muted-foreground">
                     상품이 없습니다
                   </TableCell>
                 </TableRow>
@@ -309,13 +356,11 @@ export function ProductsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="category">카테고리</Label>
-              <Input
-                id="category"
-                value={formData.category}
-                onChange={(e) =>
-                  setFormData({ ...formData, category: e.target.value })
-                }
+              <Label>상품 종류</Label>
+              <CategoryCombobox
+                value={formData.category ?? ''}
+                onChange={(category) => setFormData({ ...formData, category })}
+                categories={categories}
               />
             </div>
             <div className="space-y-2">
@@ -447,6 +492,52 @@ export function ProductsPage() {
           <DialogFooter>
             <Button onClick={closeOptionDialog}>
               완료
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 상품 삭제 확인 */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>상품 삭제</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{deleteTarget?.name}</strong> 상품을 삭제하시겠습니까? 이미 등록된 주문·작업은 유지됩니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              삭제
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* 상품 종류 이름 변경 — 같은 이름의 종류가 있으면 합쳐짐 */}
+      <Dialog open={!!renameTarget} onOpenChange={(open) => !open && setRenameTarget(null)}>
+        <DialogContent className="sm:max-w-[420px]">
+          <DialogHeader>
+            <DialogTitle>상품 종류 이름 변경</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="rename-category">"{renameTarget}"의 새 이름</Label>
+            <Input id="rename-category" value={renameTo} onChange={(e) => setRenameTo(e.target.value)} autoFocus />
+            <p className="text-xs text-muted-foreground">
+              이미 있는 종류 이름을 입력하면 두 종류가 하나로 합쳐집니다. 비워두면 미분류로 옮겨집니다.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameTarget(null)}>취소</Button>
+            <Button
+              onClick={() => renameTarget && renameMutation.mutate({ from: renameTarget, to: renameTo.trim() })}
+              disabled={renameMutation.isPending || renameTo.trim() === renameTarget}
+            >
+              변경
             </Button>
           </DialogFooter>
         </DialogContent>

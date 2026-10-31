@@ -1,18 +1,22 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, User, Phone, Loader2, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, User, Phone, Loader2, AlertTriangle, Edit } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { customerService } from '@/services/customerService'
 import { CustomerBasicInfo } from '@/components/features/customer/CustomerBasicInfo'
-import { CustomerWorkOrderList } from '@/components/features/customer/CustomerWorkOrderList'
-import { CustomerFileDrive } from '@/components/features/customer/CustomerFileDrive'
+import { OrderListTable } from '@/components/features/order/OrderListTable'
+import { ClientCompanyFiles } from '@/components/features/client/ClientCompanyFiles'
+import { CustomerAddressBook } from '@/components/features/customer/CustomerAddressBook'
+import { CustomerFormDialog } from '@/components/features/customer/CustomerFormDialog'
 
 export function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
 
   const customerId = Number(id)
+  const [isEditOpen, setIsEditOpen] = useState(false)
 
   const { data: customer, isLoading, error } = useQuery({
     queryKey: ['customer', customerId],
@@ -20,17 +24,11 @@ export function CustomerDetailPage() {
     enabled: !!customerId,
   })
 
-  const {
-    data: workOrdersPage,
-    isLoading: isWorkOrdersLoading,
-    error: workOrdersError,
-  } = useQuery({
-    queryKey: ['customerWorkOrders', customerId],
-    queryFn: () => customerService.getWorkOrders(customerId, 0, 100),
+  const { data: ordersPage, isLoading: isOrdersLoading } = useQuery({
+    queryKey: ['customer-orders', customerId],
+    queryFn: () => customerService.getOrders(customerId),
     enabled: !!customerId,
   })
-
-  const workOrders = workOrdersPage?.content || []
 
   if (isLoading) {
     return (
@@ -57,7 +55,7 @@ export function CustomerDetailPage() {
     <div className="space-y-6">
       {/* 헤더 */}
       <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/customers')}>
+        <Button variant="ghost" size="icon" onClick={() => navigate('/customers')} aria-label="고객 목록으로">
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <div>
@@ -74,33 +72,40 @@ export function CustomerDetailPage() {
             </div>
           )}
         </div>
+        <Button variant="outline" size="sm" className="ml-auto" onClick={() => setIsEditOpen(true)}>
+          <Edit className="mr-1 h-4 w-4" />
+          고객 수정
+        </Button>
       </div>
 
       <Tabs defaultValue="info">
         <TabsList>
           <TabsTrigger value="info">기본 정보</TabsTrigger>
-          <TabsTrigger value="orders">주문 내역</TabsTrigger>
-          <TabsTrigger value="files">파일 드라이브</TabsTrigger>
+          <TabsTrigger value="orders">주문 내역 ({ordersPage?.totalElements ?? 0})</TabsTrigger>
+          <TabsTrigger value="files">회사 파일</TabsTrigger>
         </TabsList>
 
         <TabsContent value="info" className="mt-6">
-          <div className="max-w-2xl">
+          <div className="grid max-w-5xl gap-8 lg:grid-cols-2">
             <CustomerBasicInfo customer={customer} />
+            <CustomerAddressBook customerId={customer.id} />
           </div>
         </TabsContent>
 
         <TabsContent value="orders" className="mt-6">
-          <CustomerWorkOrderList
-            workOrders={workOrders}
-            isLoading={isWorkOrdersLoading}
-            error={workOrdersError as Error | null}
-          />
+          <OrderListTable orders={ordersPage?.content ?? []} isLoading={isOrdersLoading} emptyText="이 고객의 주문이 없습니다." />
         </TabsContent>
 
         <TabsContent value="files" className="mt-6">
-          <CustomerFileDrive workOrders={workOrders} isLoading={isWorkOrdersLoading} />
+          {customer.clientCompanyId ? (
+            <ClientCompanyFiles clientCompanyId={customer.clientCompanyId} />
+          ) : (
+            <p className="text-sm text-muted-foreground">소속 회사가 없어 파일 공간이 없습니다. 고객 수정에서 소속 회사를 지정하세요.</p>
+          )}
         </TabsContent>
       </Tabs>
+
+      <CustomerFormDialog open={isEditOpen} onOpenChange={setIsEditOpen} customer={customer} />
     </div>
   )
 }

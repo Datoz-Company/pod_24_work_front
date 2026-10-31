@@ -2,10 +2,15 @@ import api from './api'
 import type { ApiResponse, Order, OrderCreateRequest, OrderUpdateRequest, OrderStatus, PageResponse } from '@/types'
 
 export const orderService = {
-  getAll: async (page = 0, size = 20): Promise<PageResponse<Order>> => {
-    const response = await api.get<ApiResponse<PageResponse<Order>>>(
-      `/orders?page=${page}&size=${size}`
-    )
+  getAll: async (
+    page = 0,
+    size = 20,
+    filter: { keyword?: string; status?: OrderStatus } = {}
+  ): Promise<PageResponse<Order>> => {
+    const params = new URLSearchParams({ page: String(page), size: String(size) })
+    if (filter.keyword) params.append('keyword', filter.keyword)
+    if (filter.status) params.append('status', filter.status)
+    const response = await api.get<ApiResponse<PageResponse<Order>>>(`/orders?${params}`)
     return response.data.data
   },
 

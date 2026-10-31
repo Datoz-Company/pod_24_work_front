@@ -11,6 +11,8 @@ import { ProcessesPage } from '@/pages/ProcessesPage'
 import { ProductProcessesPage } from '@/pages/ProductProcessesPage'
 import { CustomersPage } from '@/pages/CustomersPage'
 import { CustomerDetailPage } from '@/pages/CustomerDetailPage'
+import { ClientCompaniesPage } from '@/pages/ClientCompaniesPage'
+import { ClientCompanyDetailPage } from '@/pages/ClientCompanyDetailPage'
 import { ProductsPage } from '@/pages/ProductsPage'
 import { WorkHistoryPage } from '@/pages/WorkHistoryPage'
 import { SettingsPage } from '@/pages/SettingsPage'
@@ -32,6 +34,8 @@ function App() {
         <Route path="/product-processes" element={<ProductProcessesPage />} />
         <Route path="/customers" element={<CustomersPage />} />
         <Route path="/customers/:id" element={<CustomerDetailPage />} />
+        <Route path="/companies" element={<ClientCompaniesPage />} />
+        <Route path="/companies/:id" element={<ClientCompanyDetailPage />} />
         <Route path="/products" element={<ProductsPage />} />
         <Route path="/options" element={<OptionsPage />} />
         <Route path="/work-history" element={<WorkHistoryPage />} />
