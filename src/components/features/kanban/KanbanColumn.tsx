@@ -80,7 +80,7 @@ export function KanbanColumn({ column, onCardClick, isHighlighted = false }: Kan
       <div
         ref={setNodeRef}
         className={cn(
-          'min-h-0 flex-1 overflow-y-auto overflow-x-hidden rounded-lg p-3 transition-all duration-200',
+          'scrollbar-hide min-h-0 flex-1 overflow-y-auto overflow-x-hidden rounded-lg p-3 transition-all duration-200',
           isOver && 'ring-2 ring-blue-400',
           isHighlighted && !isOver && 'ring-2 ring-blue-300 ring-dashed'
         )}
