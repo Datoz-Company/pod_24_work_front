@@ -14,6 +14,7 @@ import {
   Mail,
   Truck,
   FileSpreadsheet,
+  FileText,
 } from 'lucide-react'
 import {
   AlertDialog,
@@ -42,7 +43,7 @@ import { KanbanBoard } from '@/components/features/kanban/KanbanBoard'
 import { cn } from '@/lib/utils'
 import { ORDER_SOURCE_LABELS, SHIPPING_METHOD_LABELS, type OrderStatus } from '@/types'
 import { OrderFilesPanel } from '@/components/features/order/OrderFilesPanel'
-import { excelService } from '@/services/excelService'
+import { excelService, type DocumentFormat } from '@/services/excelService'
 import { toast } from 'sonner'
 import { ORDER_STATUS, WORK_ORDER_STATUS } from '@/lib/status'
 import { formatDate, formatDateTime, formatDueDate, isOverdue } from '@/lib/format'
@@ -134,6 +135,17 @@ export function OrderDetailPage() {
   ].filter(Boolean).join(' ')
   const overdue = isOverdue(order.dueDate) && order.status !== 'COMPLETED'
 
+  // 메뉴 항목은 클릭 즉시 닫히므로 생성 중 상태는 로딩 토스트로 보여 준다
+  const downloadWorkInstructions = async (format: DocumentFormat) => {
+    const toastId = toast.loading('작업 지시서를 생성하는 중입니다...')
+    try {
+      await excelService.orderWorkInstructions(order.id, order.orderNumber, format)
+      toast.dismiss(toastId)
+    } catch {
+      toast.error('작업 지시서 생성에 실패했습니다. 주문에 작업이 있는지 확인하세요.', { id: toastId })
+    }
+  }
+
   // 한 화면에 정보를 가로로 펼치고, 헤더(액션·상태 변경)는 스크롤해도 상단에 고정
   return (
     <div className="space-y-4">
@@ -187,15 +199,13 @@ export function OrderDetailPage() {
                   <Plus className="mr-2 h-4 w-4" />
                   품목 추가
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() =>
-                    excelService
-                      .orderWorkInstructions(order.id, order.orderNumber)
-                      .catch(() => toast.error('작업 지시서 생성에 실패했습니다. 주문에 작업이 있는지 확인하세요.'))
-                  }
-                >
+                <DropdownMenuItem onClick={() => downloadWorkInstructions('xlsx')}>
                   <FileSpreadsheet className="mr-2 h-4 w-4" />
-                  작업 지시서 엑셀
+                  작업 지시서 엑셀 (.xlsx)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => downloadWorkInstructions('pdf')}>
+                  <FileText className="mr-2 h-4 w-4" />
+                  작업 지시서 PDF (.pdf)
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="text-destructive"

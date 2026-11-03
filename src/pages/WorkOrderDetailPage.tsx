@@ -15,7 +15,6 @@ import {
   Copy,
   Edit,
   ChevronRight,
-  FileSpreadsheet,
 } from 'lucide-react'
 import {
   Select,
@@ -50,6 +49,7 @@ import { kanbanService } from '@/services/kanbanService'
 import { WorkOrderAttachments } from '@/components/features/attachment/WorkOrderAttachments'
 import { WorkOrderOptionsView } from '@/components/features/option/WorkOrderOptionsView'
 import { EditWorkOrderDialog } from '@/components/features/work-order/EditWorkOrderDialog'
+import { WorkInstructionDownloadMenu } from '@/components/features/work-order/WorkInstructionDownloadMenu'
 import { useCanViewQuotes } from '@/lib/permissions'
 import { WorkOrderMemoEditor } from '@/components/features/kanban/WorkOrderMemoEditor'
 import { SHIPPING_METHOD_LABELS } from '@/types'
@@ -209,21 +209,14 @@ export function WorkOrderDetailPage() {
     )
   }
 
-  // 상단·하단에 동일하게 노출하는 작업 액션 (긴 페이지에서 다시 올라가지 않도록)
+  // 상단 헤더에 노출하는 작업 액션
   const actions = (
     <div className="flex items-center gap-2">
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() =>
-          excelService
-            .workInstruction(workOrder.id, workOrder.orderNumber)
-            .catch(() => toast.error('작업 지시서 생성에 실패했습니다'))
+      <WorkInstructionDownloadMenu
+        onDownload={(format) =>
+          excelService.workInstruction(workOrder.id, workOrder.orderNumber, format)
         }
-      >
-        <FileSpreadsheet className="mr-1 h-4 w-4" />
-        작업 지시서 엑셀
-      </Button>
+      />
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm">
@@ -612,11 +605,6 @@ export function WorkOrderDetailPage() {
             </CardContent>
           </Card>
         </div>
-      </div>
-
-      {/* 하단 액션바 */}
-      <div className="sticky bottom-0 flex justify-end border-t bg-white/95 py-3 backdrop-blur">
-        {actions}
       </div>
 
       {/* 삭제 확인 다이얼로그 */}
