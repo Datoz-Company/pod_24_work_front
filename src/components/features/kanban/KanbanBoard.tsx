@@ -219,9 +219,11 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
       setIsDraggingFromPending(isFromPending)
 
       // 중간 공정 카드인지 확인 (workOrderProcessId가 있고, IN_PROGRESS 상태)
+      // 이미 완료 표시된 공정 카드는 작업 완료 컬럼으로 보낼 일이 없으므로 제외
       const isFromMiddle = !isMiniCard &&
         card.workOrderProcessId != null &&
-        card.workOrderStatus === 'IN_PROGRESS'
+        card.workOrderStatus === 'IN_PROGRESS' &&
+        card.processStatus !== 'COMPLETED'
       setIsDraggingFromMiddle(isFromMiddle)
     }
   }
@@ -325,9 +327,15 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
     }
 
     // 작업 완료 컬럼으로 드래그한 경우: 공정 완료 처리
+    // (공정 카드는 "완료" 표시로 자기 컬럼 최상단에 남고, 모든 공정이 끝나면 서버가 작업 완료로 전환)
     const isCompletedColumn = overColumn.process.isSystem && overColumn.process.systemType === 'COMPLETED'
 
     if (isCompletedColumn && isMiddleProcessCard) {
+      // 이미 완료된 공정 — 품목의 나머지 공정이 끝나야 작업 완료로 넘어간다
+      if (activeCard.processStatus === 'COMPLETED') {
+        toast.info('이미 완료된 공정입니다. 품목의 모든 공정이 완료되면 작업 완료로 이동합니다')
+        return
+      }
       updateProcessStatusMutation.mutate({
         workOrderProcessId: activeCard.workOrderProcessId!,
         status: 'COMPLETED',

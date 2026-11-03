@@ -229,6 +229,10 @@ export interface KanbanCard {
   processStatus: ProcessStatus
   workOrderStatus: WorkOrderStatus
   dueDate?: string
+  // 이 카드 공정의 완료 시각 (공정 컬럼 최상단 "완료" 표시·정렬)
+  processCompletedAt?: string
+  // 품목(작업) 전체 완료 시각 (작업 완료 컬럼 정렬·표시)
+  workOrderCompletedAt?: string
   currentProcessOrder?: number
   totalProcesses: number
   // 현재 공정명 (중간 공정 카드용)
