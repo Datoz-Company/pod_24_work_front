@@ -92,4 +92,13 @@
   .bg-gradient-pod24 {
     background: linear-gradient(135deg, #0073FF 0%, #00C3FF 100%);
   }
+
+  /* 스크롤은 유지하고 스크롤바만 숨김 (Firefox / 구 Edge / Chrome·Safari) */
+  .scrollbar-hide {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
 }
