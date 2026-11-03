@@ -68,7 +68,7 @@ export function KanbanColumn({ column, onCardClick, isHighlighted = false }: Kan
   const orderGroups = groupCardsByOrder(column.cards)
 
   return (
-    <div className="flex flex-col min-w-[220px] w-[220px] flex-shrink-0">
+    <div className="flex min-h-0 w-[220px] min-w-[220px] flex-shrink-0 flex-col">
       {/* 컬럼 헤더 - 단순 텍스트 스타일 */}
       <div className="mb-3 px-2">
         <h3 className="text-sm font-medium text-gray-700">
@@ -76,11 +76,11 @@ export function KanbanColumn({ column, onCardClick, isHighlighted = false }: Kan
         </h3>
       </div>
 
-      {/* 컬럼 바디 */}
+      {/* 컬럼 바디 — 보드 높이를 넘는 카드는 컬럼 안에서 세로 스크롤 (min-h-0이 있어야 flex 자식이 줄어들며 스크롤이 생김) */}
       <div
         ref={setNodeRef}
         className={cn(
-          'flex-1 rounded-lg p-3 transition-all duration-200 min-h-[500px] overflow-hidden',
+          'scrollbar-hide min-h-0 flex-1 overflow-y-auto overflow-x-hidden rounded-lg p-3 transition-all duration-200',
           isOver && 'ring-2 ring-blue-400',
           isHighlighted && !isOver && 'ring-2 ring-blue-300 ring-dashed'
         )}
