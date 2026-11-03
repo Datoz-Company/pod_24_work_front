@@ -1,7 +1,7 @@
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { cn } from '@/lib/utils'
-import { KanbanOrderGroup } from './KanbanCard'
+import { KanbanOrderGroup, isCompletedProcessCard } from './KanbanCard'
 import type { KanbanColumn as KanbanColumnType, KanbanCard as KanbanCardType } from '@/types'
 
 interface KanbanColumnProps {
@@ -65,7 +65,16 @@ export function KanbanColumn({ column, onCardClick, isHighlighted = false }: Kan
     }
   })
 
-  const orderGroups = groupCardsByOrder(column.cards)
+  // 완료된 공정 카드는 컬럼 최상단 완료 영역에 (서버가 최근 완료 순으로 정렬해 내려줌),
+  // 품목의 모든 공정이 끝나면 서버에서 작업 완료 컬럼으로 넘어가므로 여기서는 사라진다
+  const completedCards: KanbanCardType[] = []
+  const activeCards: KanbanCardType[] = []
+  for (const card of column.cards) {
+    if (isCompletedProcessCard(card)) completedCards.push(card)
+    else activeCards.push(card)
+  }
+  const completedGroups = groupCardsByOrder(completedCards)
+  const orderGroups = groupCardsByOrder(activeCards)
 
   return (
     <div className="flex flex-col min-w-[220px] w-[220px] flex-shrink-0">
@@ -73,6 +82,9 @@ export function KanbanColumn({ column, onCardClick, isHighlighted = false }: Kan
       <div className="mb-3 px-2">
         <h3 className="text-sm font-medium text-gray-700">
           {column.process.name} ({orderGroups.length})
+          {completedGroups.length > 0 && (
+            <span className="ml-1.5 text-xs font-normal text-emerald-600">완료 {completedGroups.length}</span>
+          )}
         </h3>
       </div>
 
@@ -88,6 +100,17 @@ export function KanbanColumn({ column, onCardClick, isHighlighted = false }: Kan
       >
         <div className="space-y-3 w-full">
           <SortableContext items={allDraggableIds} strategy={verticalListSortingStrategy}>
+            {completedGroups.map((cards) => (
+              <KanbanOrderGroup
+                key={`done-${cards[0].orderId ?? 'wo'}-${cards[0].workOrderId}`}
+                cards={cards}
+                onCardClick={onCardClick}
+                isCompleted
+              />
+            ))}
+            {completedGroups.length > 0 && orderGroups.length > 0 && (
+              <div className="border-t border-dashed border-gray-300" aria-hidden="true" />
+            )}
             {orderGroups.map((cards) => (
               <KanbanOrderGroup
                 key={`${cards[0].orderId ?? 'wo'}-${cards[0].workOrderId}`}

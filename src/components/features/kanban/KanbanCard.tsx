@@ -1,11 +1,11 @@
 import { useState, useCallback } from 'react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { ChevronUp, ChevronDown, Layers } from 'lucide-react'
+import { CheckCircle2, ChevronUp, ChevronDown, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CompletedProcessMiniCard } from './CompletedProcessMiniCard'
 import type { KanbanCard as KanbanCardType } from '@/types'
-import { formatDueDate } from '@/lib/format'
+import { formatDateTime, formatDueDate } from '@/lib/format'
 
 // 칸반 카드 확장 상태 캐싱
 const KANBAN_EXPANDED_KEY = 'kanban-expanded-cards'
@@ -82,6 +82,42 @@ const getCardKey = (card: KanbanCardType): string =>
 
 // 작업 완료 컬럼의 카드 (completedProcessInfos가 있는 경우)
 const isCompletedColumnCard = (card: KanbanCardType): boolean => card.completedProcessInfos != null
+
+/**
+ * 공정 컬럼에 "완료" 표시로 남아 있는 카드인지 — 품목의 다른 공정이 남아 있어 작업 완료로 넘어가기 전 상태.
+ *
+ * @param {KanbanCardType} card - 칸반 카드
+ * @returns {boolean} 완료된 공정 카드 여부
+ */
+export function isCompletedProcessCard(card: KanbanCardType): boolean {
+  return card.workOrderProcessId != null && card.processStatus === 'COMPLETED' && !isCompletedColumnCard(card)
+}
+
+// "방금 완료" 강조 시간 — 다른 화면/작업자가 완료한 카드가 보드 재조회(30초) 후 눈에 띄도록
+const RECENT_COMPLETION_MS = 10 * 60 * 1000
+
+/** 카드의 완료 표시 정보 — 공정 컬럼은 공정 완료, 작업 완료 컬럼은 품목 전체 완료 기준 */
+const getCompletionMark = (card: KanbanCardType): { completedAt?: string; isRecent: boolean } | null => {
+  const done = isCompletedColumnCard(card) ? card.workOrderStatus === 'COMPLETED' : isCompletedProcessCard(card)
+  if (!done) return null
+  const completedAt = isCompletedColumnCard(card) ? card.workOrderCompletedAt : card.processCompletedAt
+  const isRecent = completedAt != null && Date.now() - new Date(completedAt).getTime() < RECENT_COMPLETION_MS
+  return { completedAt, isRecent }
+}
+
+function CompletionBadge({ isRecent }: { isRecent: boolean }) {
+  return (
+    <span
+      className={cn(
+        'flex flex-shrink-0 items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-medium',
+        isRecent ? 'bg-emerald-500 text-white animate-pulse' : 'bg-emerald-100 text-emerald-700'
+      )}
+    >
+      <CheckCircle2 className="h-3 w-3" />
+      {isRecent ? '방금 완료' : '완료'}
+    </span>
+  )
+}
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -161,6 +197,7 @@ export function KanbanItemRow({ card, onClick }: KanbanItemRowProps) {
   }
 
   const statusDotColor = getStatusDotColor(card, completedColumn)
+  const completionMark = getCompletionMark(card)
 
   return (
     <div
@@ -169,16 +206,27 @@ export function KanbanItemRow({ card, onClick }: KanbanItemRowProps) {
       {...(completedColumn ? {} : { ...attributes, ...listeners })}
       className={cn(
         'bg-white hover:bg-gray-50 transition-colors',
+        completionMark && 'bg-emerald-50/60 hover:bg-emerald-50',
         completedColumn ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing',
         isDragging && 'opacity-40'
       )}
       onClick={handleClick}
     >
       <div className="flex items-center gap-2 px-3 py-2.5">
-        <h4 className="font-semibold text-sm text-gray-900 truncate flex-1 min-w-0" title={getProductLabel(card)}>
+        <h4
+          className={cn(
+            'flex-1 min-w-0 truncate text-sm font-semibold',
+            completionMark && !completedColumn ? 'text-gray-500' : 'text-gray-900'
+          )}
+          title={getProductLabel(card)}
+        >
           {getProductLabel(card)}
         </h4>
-        <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: statusDotColor }} />
+        {completionMark ? (
+          <CompletionBadge isRecent={completionMark.isRecent} />
+        ) : (
+          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: statusDotColor }} />
+        )}
         <button
           type="button"
           onClick={handleToggleExpand}
@@ -199,6 +247,9 @@ export function KanbanItemRow({ card, onClick }: KanbanItemRowProps) {
           <DetailRow label="고객" value={getDisplayName(card)} />
           <DetailRow label="수량" value={`${card.quantity.toLocaleString()}개`} />
           <DetailRow label="출고" value={card.dueDate ? formatDueDate(card.dueDate) : '미정'} />
+          {completionMark?.completedAt && (
+            <DetailRow label="완료" value={formatDateTime(completionMark.completedAt)} />
+          )}
 
           {/* 완료된 공정 미니 카드 리스트 (작업 완료 컬럼) */}
           {completedColumn && card.completedProcessInfos && card.completedProcessInfos.length > 0 && (
@@ -229,17 +280,24 @@ interface KanbanOrderGroupProps {
   /** 같은 컬럼 안에서 같은 주문에 속한 품목들 (주문 없는 단독 작업은 1개) */
   cards: KanbanCardType[]
   onCardClick?: (card: KanbanCardType) => void
+  /** 공정 컬럼 상단의 완료 영역 그룹이면 완료 스타일로 표시 */
+  isCompleted?: boolean
 }
 
 /**
  * 한 주문의 품목들을 하나의 카드로 묶어 표시 — 상단에 주문명, 아래에 품목 행을 나열
  *
- * @param {KanbanOrderGroupProps} props - 같은 주문의 칸반 카드 목록과 클릭 핸들러
+ * @param {KanbanOrderGroupProps} props - 같은 주문의 칸반 카드 목록, 클릭 핸들러, 완료 영역 여부
  */
-export function KanbanOrderGroup({ cards, onCardClick }: KanbanOrderGroupProps) {
+export function KanbanOrderGroup({ cards, onCardClick, isCompleted = false }: KanbanOrderGroupProps) {
   const groupName = cards[0]?.orderGroupName
   return (
-    <div className="w-full bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow overflow-hidden">
+    <div
+      className={cn(
+        'w-full overflow-hidden rounded-lg border bg-white shadow-sm transition-shadow hover:shadow-md',
+        isCompleted ? 'border-emerald-200' : 'border-gray-200'
+      )}
+    >
       {groupName && <OrderGroupHeader name={groupName} />}
       <div className="divide-y divide-gray-100">
         {cards.map((card) => (
