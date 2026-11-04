@@ -27,7 +27,6 @@ interface AttributeValueSelectorProps {
   disabled?: boolean
   // 계층 구조 관련 props
   allowedChildValueIds?: number[] | null  // 부모 값에서 허용된 자식 값 ID 목록 (null이면 필터링 안함)
-  parentAttributeName?: string            // 부모 속성 이름 (자식 속성인 경우)
   isParentValueSelected?: boolean         // 부모 값이 선택되었는지 여부
   // INPUT_TEXT, INPUT_NUMBER용 props
   inputValues?: Record<number, string>    // attributeId -> 입력값
@@ -41,7 +40,6 @@ export function AttributeValueSelector({
   getValueState,
   disabled = false,
   allowedChildValueIds = null,
-  parentAttributeName,
   isParentValueSelected = true,
   inputValues = {},
   onInputChange,

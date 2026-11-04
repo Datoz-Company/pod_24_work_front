@@ -331,7 +331,6 @@ export function OptionSelector({
                     disabled={isDisabled}
                     // 계층 구조 관련 props
                     allowedChildValueIds={allowedChildValueIds}
-                    parentAttributeName={parentAttribute?.name}
                     isParentValueSelected={parentValueSelected}
                     // INPUT_TEXT, INPUT_NUMBER용 props
                     inputValues={currentSelection?.inputValues || {}}
