@@ -1,4 +1,21 @@
 import { useState } from 'react'
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit, Trash2, GripVertical, Lock } from 'lucide-react'
 import { processService } from '@/services/processService'
@@ -89,6 +106,48 @@ export function ProcessesPage() {
     },
   })
 
+  // 공정 순서 변경 (드래그) — 시스템 공정(대기중/작업 완료)은 서버에서 항상 처음/마지막으로 고정
+  const reorderMutation = useMutation({
+    mutationFn: processService.reorder,
+    onMutate: async (orderedIds: number[]) => {
+      await queryClient.cancelQueries({ queryKey: ['processes'] })
+      const previous = queryClient.getQueryData<Process[]>(['processes'])
+      if (previous) {
+        const byId = new Map(previous.map((p) => [p.id, p]))
+        const pending = previous.filter((p) => p.isSystem && p.systemType === 'PENDING')
+        const completed = previous.filter((p) => p.isSystem && p.systemType !== 'PENDING')
+        const middle = orderedIds.map((id) => byId.get(id)).filter((p): p is Process => p != null)
+        queryClient.setQueryData<Process[]>(['processes'], [...pending, ...middle, ...completed])
+      }
+      return { previous }
+    },
+    onError: (error: any, _ids, context) => {
+      if (context?.previous) queryClient.setQueryData(['processes'], context.previous)
+      toast.error(error.response?.data?.message || '공정 순서 변경에 실패했습니다')
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['processes'] })
+      // 상품별 공정·칸반 컬럼 순서도 공정 순서를 따름
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      queryClient.invalidateQueries({ queryKey: ['kanban'] })
+    },
+  })
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  )
+
+  const middleProcessIds = processes.filter((p) => !p.isSystem).map((p) => p.id)
+
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return
+    const from = middleProcessIds.indexOf(Number(active.id))
+    const to = middleProcessIds.indexOf(Number(over.id))
+    if (from < 0 || to < 0) return
+    reorderMutation.mutate(arrayMove(middleProcessIds, from, to))
+  }
+
   const closeDialog = () => {
     setIsDialogOpen(false)
     setEditingProcess(null)
@@ -159,6 +218,8 @@ export function ProcessesPage() {
         <div className="text-center py-8 text-gray-500">로딩 중...</div>
       ) : (
         <div className="rounded-lg border bg-white shadow-sm">
+          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={middleProcessIds} strategy={verticalListSortingStrategy}>
           <Table>
             <TableHeader>
               <TableRow>
@@ -170,17 +231,7 @@ export function ProcessesPage() {
             </TableHeader>
             <TableBody>
               {processes.map((process) => (
-                <TableRow
-                  key={process.id}
-                  className={process.isSystem ? 'bg-gray-50' : ''}
-                >
-                  <TableCell>
-                    {process.isSystem ? (
-                      <Lock className="h-4 w-4 text-gray-400" />
-                    ) : (
-                      <GripVertical className="h-4 w-4 cursor-grab text-gray-400" />
-                    )}
-                  </TableCell>
+                <SortableProcessRow key={process.id} process={process}>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{process.name}</span>
@@ -224,17 +275,19 @@ export function ProcessesPage() {
                       )}
                     </div>
                   </TableCell>
-                </TableRow>
+                </SortableProcessRow>
               ))}
             </TableBody>
           </Table>
+          </SortableContext>
+          </DndContext>
         </div>
       )}
 
       <div className="text-sm text-gray-500 bg-gray-50 p-4 rounded-lg">
         <p className="flex items-center gap-2">
           <Lock className="h-4 w-4" />
-          <span><strong>대기중</strong>과 <strong>작업 완료</strong>는 기본 공정으로 수정/삭제할 수 없습니다.</span>
+          <span><strong>대기중</strong>과 <strong>작업 완료</strong>는 기본 공정으로 수정/삭제할 수 없습니다. 나머지 공정은 손잡이(⋮⋮)를 끌어 순서를 바꿀 수 있습니다.</span>
         </p>
       </div>
 
@@ -318,5 +371,39 @@ export function ProcessesPage() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  )
+}
+
+/**
+ * 드래그로 순서를 바꿀 수 있는 공정 행. 시스템 공정은 잠금 아이콘을 표시하고 고정됩니다.
+ */
+function SortableProcessRow({ process, children }: { process: Process; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } =
+    useSortable({ id: process.id, disabled: process.isSystem })
+
+  return (
+    <TableRow
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`${process.isSystem ? 'bg-gray-50' : ''} ${isDragging ? 'relative z-10 bg-white shadow-md' : ''}`}
+    >
+      <TableCell>
+        {process.isSystem ? (
+          <Lock className="h-4 w-4 text-gray-400" />
+        ) : (
+          <button
+            type="button"
+            ref={setActivatorNodeRef}
+            {...attributes}
+            {...listeners}
+            aria-label={`${process.name} 순서 변경`}
+            className="flex cursor-grab touch-none items-center rounded p-1 text-gray-400 hover:bg-gray-100 active:cursor-grabbing"
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+        )}
+      </TableCell>
+      {children}
+    </TableRow>
   )
 }

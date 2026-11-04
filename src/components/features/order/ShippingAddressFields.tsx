@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import { Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -29,6 +30,18 @@ export function ShippingAddressFields({
   showDeliveryMessage = true,
 }: ShippingAddressFieldsProps) {
   const update = (patch: Partial<ShippingInfo>) => onChange({ ...value, ...patch })
+
+  // 해외 모드에는 상세주소 칸이 없으므로, 해외로 전환할 때 상세주소를 주소 칸에 합쳐 보이게 함
+  // (숨겨진 상세주소가 화면에 안 보인 채 저장되던 문제)
+  const latest = useRef({ value, onChange })
+  latest.current = { value, onChange }
+  useEffect(() => {
+    const { value: current, onChange: emit } = latest.current
+    if (isOverseas && current.addressDetail) {
+      const merged = [current.address, current.addressDetail].filter(Boolean).join(' ')
+      emit({ ...current, address: merged, addressDetail: '' })
+    }
+  }, [isOverseas, value.addressDetail])
 
   const handleAddressSearch = async () => {
     try {
