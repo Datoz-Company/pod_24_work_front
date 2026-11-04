@@ -115,6 +115,44 @@ export function OptionSelector({
     []
   )
 
+  // 화면에서 숨겨진 자식 속성(부모 미선택 또는 선택된 부모 값에 연결되지 않은 값)의 선택값 제거
+  // 다단계 계층을 위해 더 이상 제거할 값이 없을 때까지 반복
+  const pruneHiddenChildValues = useCallback(
+    (attributes: OptionAttribute[], selectedValueIds: number[]): number[] => {
+      let result = selectedValueIds
+      let changed = true
+
+      while (changed) {
+        changed = false
+        for (const attribute of attributes) {
+          const parentAttribute = findParentAttribute(attribute, attributes)
+          if (!parentAttribute) continue
+
+          const parentSelected = isParentValueSelected(attribute, parentAttribute, result)
+          const allowedIds = getAllowedChildValueIds(attribute, parentAttribute, result)
+          const toggleValueId = getToggleValueId(attribute.id)
+
+          const next = result.filter((id) => {
+            const belongsToAttribute =
+              id === toggleValueId || attribute.values.some((v) => v.id === id)
+            if (!belongsToAttribute) return true
+            if (!parentSelected) return false
+            if (allowedIds === null || id === toggleValueId) return true
+            return allowedIds.includes(id)
+          })
+
+          if (next.length !== result.length) {
+            result = next
+            changed = true
+          }
+        }
+      }
+
+      return result
+    },
+    [findParentAttribute, isParentValueSelected, getAllowedChildValueIds]
+  )
+
   // 속성값 변경 핸들러
   const handleValueChange = useCallback(
     (optionId: number, attributeId: number, valueIds: number[]) => {
@@ -137,9 +175,14 @@ export function OptionSelector({
           }
         )
 
+        const attributes =
+          productOptions.find((po) => po.optionId === optionId)?.option?.attributes ?? []
         const updatedOption: WorkOrderOptionRequest = {
           ...existingOption,
-          selectedAttributeValueIds: [...otherAttributeValues, ...valueIds],
+          selectedAttributeValueIds: pruneHiddenChildValues(attributes, [
+            ...otherAttributeValues,
+            ...valueIds,
+          ]),
         }
 
         onOptionsChange(
@@ -157,7 +200,7 @@ export function OptionSelector({
         onOptionsChange([...selectedOptions, newOption])
       }
     },
-    [selectedOptions, productOptions, onOptionsChange]
+    [selectedOptions, productOptions, onOptionsChange, pruneHiddenChildValues]
   )
 
   // INPUT_TEXT, INPUT_NUMBER 입력값 변경 핸들러
@@ -288,7 +331,6 @@ export function OptionSelector({
                     disabled={isDisabled}
                     // 계층 구조 관련 props
                     allowedChildValueIds={allowedChildValueIds}
-                    parentAttributeName={parentAttribute?.name}
                     isParentValueSelected={parentValueSelected}
                     // INPUT_TEXT, INPUT_NUMBER용 props
                     inputValues={currentSelection?.inputValues || {}}
