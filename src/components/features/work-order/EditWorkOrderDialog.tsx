@@ -54,6 +54,9 @@ export function EditWorkOrderDialog({ workOrder, open, onOpenChange }: EditWorkO
   const { data: products = [] } = useQuery({
     queryKey: ['products', 'with-processes'],
     queryFn: productService.getAllWithProcesses,
+    // 다른 탭(상품별 작업 공정)에서 바꾼 공정 설정을 바로 반영 — 화면으로 돌아오면 다시 조회
+    staleTime: 0,
+    refetchOnWindowFocus: 'always',
     enabled: open,
   })
 

@@ -57,6 +57,7 @@ export function OrderDetailPage() {
   const queryClient = useQueryClient()
   const [isAddWorkOrderOpen, setIsAddWorkOrderOpen] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [activeTab, setActiveTab] = useState('info')
 
   const orderId = Number(id)
@@ -172,7 +173,12 @@ export function OrderDetailPage() {
                 <button
                   key={status}
                   type="button"
-                  onClick={() => statusMutation.mutate({ id: order.id, status })}
+                  onClick={() =>
+                    // 취소는 되돌리기 번거로우므로 한 번 더 확인
+                    status === 'CANCELLED'
+                      ? setShowCancelConfirm(true)
+                      : statusMutation.mutate({ id: order.id, status })
+                  }
                   disabled={statusMutation.isPending || order.status === status}
                   aria-pressed={order.status === status}
                   className={cn(
@@ -426,6 +432,27 @@ export function OrderDetailPage() {
       />
 
       {/* 삭제 확인 다이얼로그 */}
+      <AlertDialog open={showCancelConfirm} onOpenChange={setShowCancelConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>주문을 취소하시겠습니까?</AlertDialogTitle>
+            <AlertDialogDescription>
+              "{order.orderName || order.orderNumber}" 주문을 취소 상태로 바꿉니다. 취소된 주문은 작업이 진행되어도
+              상태가 자동으로 바뀌지 않으며, 필요하면 상태 버튼으로 다시 변경할 수 있습니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>닫기</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive hover:bg-destructive/90"
+              onClick={() => statusMutation.mutate({ id: order.id, status: 'CANCELLED' })}
+            >
+              주문 취소
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>

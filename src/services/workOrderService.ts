@@ -12,10 +12,10 @@ export const workOrderService = {
     return response.data.data
   },
 
-  getHistory: async (page = 0, size = 20): Promise<PageResponse<WorkOrder>> => {
-    const response = await api.get<ApiResponse<PageResponse<WorkOrder>>>(
-      `/work-orders/history?page=${page}&size=${size}`
-    )
+  getHistory: async (page = 0, size = 20, keyword?: string): Promise<PageResponse<WorkOrder>> => {
+    const response = await api.get<ApiResponse<PageResponse<WorkOrder>>>('/work-orders/history', {
+      params: { page, size, keyword: keyword || undefined },
+    })
     return response.data.data
   },
 

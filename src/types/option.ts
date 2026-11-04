@@ -3,6 +3,23 @@ export type OptionType = 'STANDARD' | 'ADDON' | 'CUSTOM'
 export type QuantityType = 'FIXED' | 'PER_UNIT' | 'RANGE'
 export type PreviewType = 'SELECT_BOX' | 'CHECK_BOX' | 'RADIO_BUTTON' | 'INPUT_NUMBER' | 'INPUT_TEXT' | 'TOGGLE_BUTTON'
 export type TriggerType = 'AND' | 'OR' | 'NAND' | 'NOR'
+
+/** 속성 표시 방식 화면 라벨 */
+export const PREVIEW_TYPE_LABELS: Record<PreviewType, string> = {
+  SELECT_BOX: '드롭다운',
+  RADIO_BUTTON: '라디오 버튼',
+  CHECK_BOX: '체크박스',
+  INPUT_NUMBER: '숫자 입력',
+  INPUT_TEXT: '텍스트 입력',
+  TOGGLE_BUTTON: '토글 버튼',
+}
+
+/** 옵션 종류 화면 라벨 */
+export const OPTION_TYPE_LABELS: Record<OptionType, string> = {
+  STANDARD: '기본',
+  ADDON: '추가',
+  CUSTOM: '맞춤',
+}
 export type TriggerVisibleType = 'HIDE' | 'DISABLE'
 
 // 속성값

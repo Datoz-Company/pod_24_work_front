@@ -40,8 +40,12 @@ api.interceptors.response.use(
     const originalRequest = error.config
     const status = error.response?.status
 
+    // 로그인/회원가입/토큰 갱신 요청의 401은 "자격 증명 오류"이므로 그대로 호출부에 전달
+    // (여기서 /login 으로 강제 이동하면 화면이 새로고침되어 오류 메시지가 사라짐)
+    const isAuthRequest = typeof originalRequest?.url === 'string' && originalRequest.url.includes('/auth/')
+
     // 401 또는 403 에러 시 토큰 갱신 시도
-    if ((status === 401 || status === 403) && !originalRequest._retry) {
+    if ((status === 401 || status === 403) && !originalRequest._retry && !isAuthRequest) {
       const refreshToken = useAuthStore.getState().refreshToken
 
       if (!refreshToken) {

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, Link2, Unlink, GitBranch, CornerDownRight, AlertTriangle, Info, Check } from 'lucide-react'
 import { optionService } from '@/services/optionService'
@@ -43,6 +44,7 @@ import type {
   AttributeValueCreateRequest,
   PreviewType,
 } from '@/types/option'
+import { PREVIEW_TYPE_LABELS } from '@/types/option'
 
 export function OptionsPage() {
   const queryClient = useQueryClient()
@@ -52,16 +54,21 @@ export function OptionsPage() {
   const [isOptionDialogOpen, setIsOptionDialogOpen] = useState(false)
   const [isAttributeDialogOpen, setIsAttributeDialogOpen] = useState(false)
   const [isValueDialogOpen, setIsValueDialogOpen] = useState(false)
-  const [deleteTarget, setDeleteTarget] = useState<{
-    type: 'option' | 'attribute' | 'value'
-    id: number
-    name: string
-  } | null>(null)
+  // 삭제 대상 — 옵션/속성은 하위 항목 안내를 위해 원본 객체를 함께 보관
+  const [deleteTarget, setDeleteTarget] = useState<
+    | { type: 'option'; id: number; name: string; option: Option }
+    | { type: 'attribute'; id: number; name: string; attribute: OptionAttribute }
+    | { type: 'value'; id: number; name: string }
+    | null
+  >(null)
 
   // 편집 대상
   const [editingOption, setEditingOption] = useState<Option | null>(null)
   const [selectedOptionId, setSelectedOptionId] = useState<number | null>(null)
   const [selectedAttributeId, setSelectedAttributeId] = useState<number | null>(null)
+  // 수정 중인 속성/속성값 (null이면 추가 모드)
+  const [editingAttribute, setEditingAttribute] = useState<OptionAttribute | null>(null)
+  const [editingValue, setEditingValue] = useState<OptionAttributeValue | null>(null)
 
   // 폼 데이터
   const [optionForm, setOptionForm] = useState<OptionCreateRequest>({
@@ -125,6 +132,10 @@ export function OptionsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['options'] })
       setDeleteTarget(null)
+      toast.success('옵션이(가) 삭제되었습니다')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || '옵션 삭제에 실패했습니다')
     },
   })
 
@@ -142,6 +153,46 @@ export function OptionsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['options'] })
       setDeleteTarget(null)
+      toast.success('속성이(가) 삭제되었습니다')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || '속성 삭제에 실패했습니다')
+    },
+  })
+
+  const updateAttributeMutation = useMutation({
+    mutationFn: ({ attribute, data }: { attribute: OptionAttribute; data: AttributeCreateRequest }) =>
+      // 서버 수정 API가 systemAttributeType을 그대로 덮어쓰므로 기존 값을 함께 보냄
+      optionService.updateAttribute(attribute.id, { ...data, systemAttributeType: attribute.systemAttributeType }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['options'] })
+      closeAttributeDialog()
+      toast.success('속성을 수정했습니다')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || '속성 수정에 실패했습니다')
+    },
+  })
+
+  const updateValueMutation = useMutation({
+    mutationFn: ({ value, data }: { value: OptionAttributeValue; data: AttributeValueCreateRequest }) =>
+      // 서버 수정 API가 트리거 필드를 그대로 덮어쓰므로 기존 값을 함께 보냄
+      optionService.updateAttributeValue(value.id, {
+        value: data.value,
+        imageUrl: data.imageUrl,
+        price: data.price,
+        allowCustomInput: data.allowCustomInput,
+        isEnabled: value.isEnabled,
+        triggerAttributeValueIds: value.triggerAttributeValueIds,
+        triggerVisibleType: value.triggerVisibleType,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['options'] })
+      closeValueDialog()
+      toast.success('속성값을 수정했습니다')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || '속성값 수정에 실패했습니다')
     },
   })
 
@@ -177,6 +228,10 @@ export function OptionsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['options'] })
       setDeleteTarget(null)
+      toast.success('속성값이(가) 삭제되었습니다')
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || '속성값 삭제에 실패했습니다')
     },
   })
 
@@ -262,9 +317,21 @@ export function OptionsPage() {
     setIsAttributeDialogOpen(true)
   }
 
+  const openEditAttributeDialog = (attribute: OptionAttribute) => {
+    setEditingAttribute(attribute)
+    setAttributeForm({
+      name: attribute.name,
+      isAddable: attribute.isAddable,
+      isMultiSelectable: attribute.isMultiSelectable,
+      previewType: attribute.previewType,
+    })
+    setIsAttributeDialogOpen(true)
+  }
+
   const closeAttributeDialog = () => {
     setIsAttributeDialogOpen(false)
     setSelectedOptionId(null)
+    setEditingAttribute(null)
   }
 
   const openValueDialog = (attributeId: number) => {
@@ -273,9 +340,21 @@ export function OptionsPage() {
     setIsValueDialogOpen(true)
   }
 
+  const openEditValueDialog = (value: OptionAttributeValue) => {
+    setEditingValue(value)
+    setValueForm({
+      value: value.value,
+      price: value.price,
+      imageUrl: value.imageUrl,
+      allowCustomInput: value.allowCustomInput,
+    })
+    setIsValueDialogOpen(true)
+  }
+
   const closeValueDialog = () => {
     setIsValueDialogOpen(false)
     setSelectedAttributeId(null)
+    setEditingValue(null)
   }
 
   const handleOptionSubmit = () => {
@@ -287,16 +366,23 @@ export function OptionsPage() {
   }
 
   const handleAttributeSubmit = () => {
-    if (selectedOptionId) {
+    if (editingAttribute) {
+      updateAttributeMutation.mutate({ attribute: editingAttribute, data: attributeForm })
+    } else if (selectedOptionId) {
       createAttributeMutation.mutate({ optionId: selectedOptionId, data: attributeForm })
     }
   }
 
   const handleValueSubmit = () => {
-    if (selectedAttributeId) {
+    if (editingValue) {
+      updateValueMutation.mutate({ value: editingValue, data: valueForm })
+    } else if (selectedAttributeId) {
       createValueMutation.mutate({ attributeId: selectedAttributeId, data: valueForm })
     }
   }
+
+  const isDeleting =
+    deleteOptionMutation.isPending || deleteAttributeMutation.isPending || deleteValueMutation.isPending
 
   const handleDelete = () => {
     if (!deleteTarget) return
@@ -498,7 +584,7 @@ export function OptionsPage() {
                       variant="ghost"
                       size="sm"
                       onClick={() =>
-                        setDeleteTarget({ type: 'option', id: option.id, name: option.name })
+                        setDeleteTarget({ type: 'option', id: option.id, name: option.name, option })
                       }
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
@@ -581,7 +667,7 @@ export function OptionsPage() {
                                       variant="outline"
                                       className={`text-xs ${depth > 0 ? 'border-primary/30 bg-primary/10' : ''}`}
                                     >
-                                      {attr.previewType}
+                                      {PREVIEW_TYPE_LABELS[attr.previewType] ?? attr.previewType}
                                     </Badge>
                                     {attr.isMultiSelectable && (
                                       <Badge variant="secondary" className="text-xs">
@@ -600,6 +686,16 @@ export function OptionsPage() {
                                     )}
                                   </div>
                                   <div className="flex items-center gap-1 flex-wrap">
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={() => openEditAttributeDialog(attr)}
+                                      aria-label={`${attr.name} 속성 수정`}
+                                      title="속성 수정"
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </Button>
                                     {/* 하위 속성 연결 버튼 - 모든 속성에 표시 */}
                                     <Button
                                       variant={hasChildren ? 'default' : 'outline'}
@@ -630,6 +726,7 @@ export function OptionsPage() {
                                           type: 'attribute',
                                           id: attr.id,
                                           name: attr.name,
+                                          attribute: attr,
                                         })
                                       }
                                     >
@@ -665,7 +762,14 @@ export function OptionsPage() {
                                                   : 'bg-white border-border hover:bg-muted/50'
                                             }`}
                                           >
-                                            <span className="font-medium">{value.value}</span>
+                                            <button
+                                              type="button"
+                                              onClick={() => openEditValueDialog(value)}
+                                              className="font-medium hover:underline"
+                                              title="값 수정"
+                                            >
+                                              {value.value}
+                                            </button>
                                             <button
                                               type="button"
                                               onClick={() => toggleCustomInputMutation.mutate(value)}
@@ -827,10 +931,10 @@ export function OptionsPage() {
       </Dialog>
 
       {/* 속성 추가 다이얼로그 */}
-      <Dialog open={isAttributeDialogOpen} onOpenChange={setIsAttributeDialogOpen}>
+      <Dialog open={isAttributeDialogOpen} onOpenChange={(open) => { if (!open) closeAttributeDialog() }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>새 속성 추가</DialogTitle>
+            <DialogTitle>{editingAttribute ? '속성 수정' : '새 속성 추가'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -879,19 +983,19 @@ export function OptionsPage() {
             </Button>
             <Button
               onClick={handleAttributeSubmit}
-              disabled={!attributeForm.name || createAttributeMutation.isPending}
+              disabled={!attributeForm.name || createAttributeMutation.isPending || updateAttributeMutation.isPending}
             >
-              추가
+              {editingAttribute ? '수정' : '추가'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* 속성값 추가 다이얼로그 */}
-      <Dialog open={isValueDialogOpen} onOpenChange={setIsValueDialogOpen}>
+      <Dialog open={isValueDialogOpen} onOpenChange={(open) => { if (!open) closeValueDialog() }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>새 속성값 추가</DialogTitle>
+            <DialogTitle>{editingValue ? '속성값 수정' : '새 속성값 추가'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
@@ -937,60 +1041,113 @@ export function OptionsPage() {
             </Button>
             <Button
               onClick={handleValueSubmit}
-              disabled={!valueForm.value || createValueMutation.isPending}
+              disabled={!valueForm.value || createValueMutation.isPending || updateValueMutation.isPending}
             >
-              추가
+              {editingValue ? '수정' : '추가'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* 삭제 확인 다이얼로그 */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open && !isDeleting) setDeleteTarget(null)
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>삭제 확인</AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2">
-              <span className="block">
-                "{deleteTarget?.name}"을(를) 삭제하시겠습니까?
-              </span>
-              {deleteTarget?.type === 'option' && (
-                <span className="flex items-start gap-2 text-destructive text-sm">
-                  <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                  <span>
-                    이 옵션에 포함된 모든 속성과 속성값이 함께 삭제됩니다.
-                    <br />
-                    이 옵션을 사용 중인 상품에서 연결이 해제됩니다.
-                    <br />
-                    속성값 간 연결(계층 관계)도 함께 삭제됩니다.
-                  </span>
-                </span>
-              )}
-              {deleteTarget?.type === 'attribute' && (
-                <span className="flex items-start gap-2 text-destructive text-sm">
-                  <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                  <span>
-                    이 속성에 포함된 모든 속성값이 함께 삭제됩니다.
-                    <br />
-                    속성값 간 연결(계층 관계)도 함께 삭제됩니다.
-                  </span>
-                </span>
-              )}
-              {deleteTarget?.type === 'value' && (
-                <span className="flex items-start gap-2 text-destructive text-sm">
-                  <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                  <span>이 값과 연결된 상위/하위 값 관계가 해제됩니다.</span>
-                </span>
-              )}
-              <span className="block text-muted-foreground text-xs mt-2">
-                이 작업은 취소할 수 없습니다.
-              </span>
+            <AlertDialogTitle>
+              {deleteTarget?.type === 'option' && '옵션 삭제'}
+              {deleteTarget?.type === 'attribute' && '속성 삭제'}
+              {deleteTarget?.type === 'value' && '속성값 삭제'}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  <span className="font-medium text-foreground">"{deleteTarget?.name}"</span>을(를) 삭제하시겠습니까?
+                </p>
+
+                {deleteTarget?.type === 'option' && (() => {
+                  const attrs = deleteTarget.option.attributes
+                  const valueCount = attrs.reduce((sum, a) => sum + a.values.length, 0)
+                  return (
+                    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+                      <p className="flex items-start gap-2 font-medium text-destructive">
+                        <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                        {attrs.length > 0
+                          ? `하위의 속성 ${attrs.length}개와 속성값 ${valueCount}개가 모두 함께 삭제됩니다.`
+                          : '이 옵션에는 하위 속성이 없습니다.'}
+                      </p>
+                      {attrs.length > 0 && (
+                        <ul className="max-h-48 overflow-y-auto space-y-1.5 pl-6 text-xs">
+                          {attrs.map((a) => (
+                            <li key={a.id}>
+                              <span className="font-medium text-foreground">{a.name}</span>
+                              {a.values.length > 0 ? (
+                                <span> — {a.values.map((v) => v.value).join(', ')}</span>
+                              ) : (
+                                <span> — 값 없음</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      <p className="pl-6 text-xs">
+                        이 옵션을 사용 중인 상품에서 연결이 해제되고, 속성값 간 연결(계층 관계)도 해제됩니다.
+                      </p>
+                    </div>
+                  )
+                })()}
+
+                {deleteTarget?.type === 'attribute' && (() => {
+                  const values = deleteTarget.attribute.values
+                  return (
+                    <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+                      <p className="flex items-start gap-2 font-medium text-destructive">
+                        <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                        {values.length > 0
+                          ? `하위의 속성값 ${values.length}개가 모두 함께 삭제됩니다.`
+                          : '이 속성에는 속성값이 없습니다.'}
+                      </p>
+                      {values.length > 0 && (
+                        <p className="pl-6 text-xs text-foreground">
+                          {values.map((v) => v.value).join(', ')}
+                        </p>
+                      )}
+                      <p className="pl-6 text-xs">
+                        이 속성에 연결된 하위 속성은 연결만 해제되며, 속성값 간 연결(계층 관계)도 해제됩니다.
+                      </p>
+                    </div>
+                  )
+                })()}
+
+                {deleteTarget?.type === 'value' && (
+                  <p className="flex items-start gap-2 text-destructive">
+                    <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    이 값과 연결된 상위/하위 값 관계와 표시 조건이 해제됩니다.
+                  </p>
+                )}
+
+                <p className="text-xs">
+                  이미 등록된 작업지시서에 저장된 옵션 정보는 그대로 유지됩니다.
+                </p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>취소</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
-              삭제
+            <AlertDialogCancel disabled={isDeleting}>취소</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                // 요청이 끝날 때까지 다이얼로그 유지 (실패 시 사용자가 알 수 있도록)
+                e.preventDefault()
+                handleDelete()
+              }}
+              disabled={isDeleting}
+              className="bg-destructive hover:bg-destructive/90"
+            >
+              {isDeleting ? '삭제 중...' : '삭제'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1228,20 +1385,18 @@ export function OptionsPage() {
                   {childAttr.name}
                 </h4>
                 {childAttr.values.map((childValue) => (
-                  <div
+                  // label로 감싸 클릭을 체크박스 하나로만 전달 (div onClick + onChange 이중 토글 방지)
+                  <label
                     key={childValue.id}
                     className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-colors ${
                       selectedChildValueIds.includes(childValue.id)
                         ? 'border-primary bg-primary/5'
                         : 'hover:border-primary/50'
                     }`}
-                    onClick={() => toggleChildValueSelection(childValue.id)}
                   >
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       checked={selectedChildValueIds.includes(childValue.id)}
-                      onChange={() => toggleChildValueSelection(childValue.id)}
-                      className="h-4 w-4 rounded border-primary text-primary focus:ring-primary"
+                      onCheckedChange={() => toggleChildValueSelection(childValue.id)}
                     />
                     <span>{childValue.value}</span>
                     {childValue.price > 0 && (
@@ -1249,7 +1404,7 @@ export function OptionsPage() {
                         (+₩{childValue.price.toLocaleString()})
                       </span>
                     )}
-                  </div>
+                  </label>
                 ))}
                 {childAttr.values.length === 0 && (
                   <p className="text-sm text-muted-foreground py-2 text-center">
