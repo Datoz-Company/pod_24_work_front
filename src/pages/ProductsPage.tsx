@@ -38,6 +38,7 @@ import { CategoryCombobox } from '@/components/features/product/CategoryCombobox
 import { getCategories, UNCATEGORIZED } from '@/components/features/order/OrderItemCard'
 import type { Product, ProductCreateRequest } from '@/types'
 import type { Option, ProductOptionItem } from '@/types/option'
+import { OPTION_TYPE_LABELS } from '@/types/option'
 
 export function ProductsPage() {
   const queryClient = useQueryClient()
@@ -194,7 +195,7 @@ export function ProductsPage() {
       {
         optionId: option.id,
         displayOrder: currentOptions.length + 1,
-        isRequired: false,
+        isRequired: option.isRequired ?? false, // 옵션 관리의 "필수" 설정을 기본값으로
       },
     ]
 
@@ -420,7 +421,7 @@ export function ProductsPage() {
                             </Badge>
                           )}
                           <Badge variant="secondary" className="text-xs">
-                            {po.option?.optionType}
+                            {po.option?.optionType ? OPTION_TYPE_LABELS[po.option.optionType] : ''}
                           </Badge>
                         </div>
                         <div className="flex items-center gap-2">
@@ -466,7 +467,7 @@ export function ProductsPage() {
                         <div className="flex items-center gap-2">
                           <span>{option.name}</span>
                           <Badge variant="outline" className="text-xs">
-                            {option.optionType}
+                            {OPTION_TYPE_LABELS[option.optionType]}
                           </Badge>
                           <span className="text-xs text-muted-foreground">
                             ({option.attributes.length}개 속성)
