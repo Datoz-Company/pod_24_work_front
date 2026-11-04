@@ -27,7 +27,6 @@ interface AttributeValueSelectorProps {
   disabled?: boolean
   // 계층 구조 관련 props
   allowedChildValueIds?: number[] | null  // 부모 값에서 허용된 자식 값 ID 목록 (null이면 필터링 안함)
-  parentAttributeName?: string            // 부모 속성 이름 (자식 속성인 경우)
   isParentValueSelected?: boolean         // 부모 값이 선택되었는지 여부
   // INPUT_TEXT, INPUT_NUMBER용 props
   inputValues?: Record<number, string>    // attributeId -> 입력값
@@ -41,7 +40,6 @@ export function AttributeValueSelector({
   getValueState,
   disabled = false,
   allowedChildValueIds = null,
-  parentAttributeName,
   isParentValueSelected = true,
   inputValues = {},
   onInputChange,
@@ -60,38 +58,14 @@ export function AttributeValueSelector({
     enabledValues = enabledValues.filter((v) => allowedChildValueIds.includes(v.id))
   }
 
-  // 자식 속성인데 부모 값이 선택되지 않은 경우 (TOGGLE_BUTTON 부모의 경우 토글 OFF)
+  // 자식 속성인데 부모 값이 선택되지 않은 경우 (TOGGLE_BUTTON 부모의 경우 토글 OFF) → 숨김
   if (isChildAttribute && !isParentValueSelected) {
-    return (
-      <div className="space-y-2">
-        <Label className="flex items-center gap-2">
-          {attribute.name}
-          <Badge variant="outline" className="text-xs text-muted-foreground">
-            자식 속성
-          </Badge>
-        </Label>
-        <div className="p-3 border border-dashed rounded-md bg-muted/50 text-sm text-muted-foreground">
-          {parentAttributeName ? `"${parentAttributeName}"을(를) 활성화해주세요.` : '부모 속성을 먼저 선택해주세요.'}
-        </div>
-      </div>
-    )
+    return null
   }
 
-  // 자식 속성인데 연결된 자식 값이 없는 경우 (값이 필요한 타입만 체크)
+  // 자식 속성인데 선택한 부모 값에 연결된 자식 값이 없는 경우 → 숨김 (값이 필요한 타입만 체크)
   if (isChildAttribute && hasAllowedFilter && enabledValues.length === 0 && !isValuelessType) {
-    return (
-      <div className="space-y-2">
-        <Label className="flex items-center gap-2">
-          {attribute.name}
-          <Badge variant="outline" className="text-xs text-muted-foreground">
-            자식 속성
-          </Badge>
-        </Label>
-        <div className="p-3 border border-dashed rounded-md bg-muted/50 text-sm text-muted-foreground">
-          선택한 "{parentAttributeName || '부모 값'}"에 연결된 값이 없습니다.
-        </div>
-      </div>
-    )
+    return null
   }
 
   // 현재 속성에서 선택된 값들
