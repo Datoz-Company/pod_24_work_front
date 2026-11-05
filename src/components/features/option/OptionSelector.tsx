@@ -65,22 +65,25 @@ export function OptionSelector({
         return [] // 부모 값이 선택되지 않으면 빈 배열 반환
       }
 
-      // 선택된 부모 값들의 childValueIds 합집합
-      const allowedIds = new Set<number>()
-      let hasAnyMapping = false // 하나라도 매핑이 있는지 확인
+      // 이 자식 속성에 속한 값 ID (부모 값 하나가 여러 자식 속성의 값과 연결될 수 있으므로 속성별로 분리)
+      const childAttributeValueIds = new Set(childAttribute.values.map((v) => v.id))
 
+      // 부모 속성의 어떤 값도 이 자식 속성과 연결되어 있지 않으면 (매핑 미설정) 필터링 없이 모든 자식 값 표시
+      const isMappingConfigured = parentAttribute.values.some((parentValue) =>
+        (parentValue.childValueIds ?? []).some((childId) => childAttributeValueIds.has(childId))
+      )
+      if (!isMappingConfigured) {
+        return null
+      }
+
+      // 선택된 부모 값들에 연결된 이 자식 속성의 값만 허용 (예: "없음"처럼 연결이 없으면 빈 배열 → 숨김)
+      const allowedIds = new Set<number>()
       for (const parentValue of selectedParentValues) {
-        if (parentValue.childValueIds && parentValue.childValueIds.length > 0) {
-          hasAnyMapping = true
-          for (const childId of parentValue.childValueIds) {
+        for (const childId of parentValue.childValueIds ?? []) {
+          if (childAttributeValueIds.has(childId)) {
             allowedIds.add(childId)
           }
         }
-      }
-
-      // 선택된 부모 값들 중 어떤 것도 하위 값 연결이 없으면 필터링 없이 모든 자식 값 표시
-      if (!hasAnyMapping) {
-        return null
       }
 
       return Array.from(allowedIds)
