@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, Link2, Unlink, GitBranch, CornerDownRight, AlertTriangle, Info, Check } from 'lucide-react'
 import { optionService } from '@/services/optionService'
+import { SortableGroup, SortableItem } from '@/components/features/option/SortableList'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -45,6 +46,36 @@ import type {
   PreviewType,
 } from '@/types/option'
 import { PREVIEW_TYPE_LABELS } from '@/types/option'
+
+/**
+ * 형제 속성끼리 바꾼 순서를 옵션 전체 속성 순서에 반영합니다.
+ * 형제가 차지하던 자리에 새 순서대로 다시 채우고, 나머지 속성의 위치는 그대로 둡니다.
+ * (서버는 형제끼리만 displayOrder를 비교하므로 전체 순서를 보내도 계층은 유지됨)
+ *
+ * @param allIds - 옵션의 전체 속성 id (현재 표시 순서)
+ * @param reorderedSiblingIds - 새 순서의 형제 속성 id
+ * @returns 옵션 전체 속성 id의 새 순서
+ */
+export function mergeSiblingOrder(allIds: readonly number[], reorderedSiblingIds: readonly number[]): number[] {
+  const siblings = new Set(reorderedSiblingIds)
+  const queue = [...reorderedSiblingIds]
+  const result: number[] = []
+  for (const id of allIds) {
+    if (siblings.has(id)) {
+      const next = queue.shift()
+      if (next !== undefined) result.push(next)
+    } else {
+      result.push(id)
+    }
+  }
+  return result
+}
+
+/** id 목록 순서대로 배열을 정렬한 새 배열을 반환합니다 (목록에 없는 항목은 뒤로). */
+function sortByIds<T extends { id: number }>(items: readonly T[], ids: readonly number[]): T[] {
+  const rank = new Map(ids.map((id, index) => [id, index]))
+  return [...items].sort((a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity))
+}
 
 export function OptionsPage() {
   const queryClient = useQueryClient()
@@ -232,6 +263,54 @@ export function OptionsPage() {
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || '속성값 삭제에 실패했습니다')
+    },
+  })
+
+  // 정렬 Mutations — 드롭 즉시 화면에 반영하고(낙관적 업데이트) 실패하면 되돌림
+  const reorderAttributesMutation = useMutation({
+    mutationFn: ({ optionId, ids }: { optionId: number; ids: number[] }) =>
+      optionService.reorderAttributes(optionId, ids),
+    onMutate: async ({ optionId, ids }) => {
+      await queryClient.cancelQueries({ queryKey: ['options'] })
+      const previous = queryClient.getQueryData<Option[]>(['options'])
+      queryClient.setQueryData<Option[]>(['options'], (old) =>
+        old?.map((o) => (o.id === optionId ? { ...o, attributes: sortByIds(o.attributes, ids) } : o))
+      )
+      return { previous }
+    },
+    onError: (error: any, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(['options'], context.previous)
+      toast.error(error.response?.data?.message || '속성 순서 변경에 실패했습니다')
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['options'] })
+      queryClient.invalidateQueries({ queryKey: ['product-options'] })
+    },
+  })
+
+  const reorderValuesMutation = useMutation({
+    mutationFn: ({ attributeId, ids }: { attributeId: number; ids: number[] }) =>
+      optionService.reorderAttributeValues(attributeId, ids),
+    onMutate: async ({ attributeId, ids }) => {
+      await queryClient.cancelQueries({ queryKey: ['options'] })
+      const previous = queryClient.getQueryData<Option[]>(['options'])
+      queryClient.setQueryData<Option[]>(['options'], (old) =>
+        old?.map((o) => ({
+          ...o,
+          attributes: o.attributes.map((a) =>
+            a.id === attributeId ? { ...a, values: sortByIds(a.values, ids) } : a
+          ),
+        }))
+      )
+      return { previous }
+    },
+    onError: (error: any, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(['options'], context.previous)
+      toast.error(error.response?.data?.message || '값 순서 변경에 실패했습니다')
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['options'] })
+      queryClient.invalidateQueries({ queryKey: ['product-options'] })
     },
   })
 
@@ -648,13 +727,16 @@ export function OptionsPage() {
                           const visibleForValueNames = getParentValueNames(attr)
 
                           return (
-                            <div key={attr.id}>
+                            <SortableItem key={attr.id} id={attr.id}>
+                              {(attrHandle) => (
+                            <>
                               {/* 속성 카드 */}
                               <div
                                 className={`border rounded-lg p-4 shadow-sm ${styles.bg} ${depth > 0 ? styles.border : ''}`}
                               >
                                 <div className="flex items-center justify-between mb-3">
                                   <div className="flex items-center gap-2 flex-wrap">
+                                    {attrHandle({ label: attr.name })}
                                     {depth > 0 ? (
                                       <CornerDownRight className="h-4 w-4 text-primary" />
                                     ) : hasChildren ? (
@@ -748,13 +830,18 @@ export function OptionsPage() {
                                       </span>
                                     </div>
                                   ) : (
-                                    <>
+                                    <SortableGroup
+                                      layout="grid"
+                                      ids={attr.values.map((v) => v.id)}
+                                      onReorder={(ids) => reorderValuesMutation.mutate({ attributeId: attr.id, ids })}
+                                    >
                                       {attr.values.map((value) => {
                                         const hasChildValues = value.hasChildValues || (value.childValueIds && value.childValueIds.length > 0)
                                         return (
-                                          <div
+                                          <SortableItem
                                             key={value.id}
-                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm group border transition-colors ${
+                                            id={value.id}
+                                            className={`flex items-center gap-1.5 pl-1.5 pr-3 py-1.5 rounded-md text-sm group border transition-colors ${
                                               hasChildValues
                                                 ? 'bg-primary/5 border-primary/30 hover:bg-primary/10'
                                                 : depth === 0
@@ -762,6 +849,9 @@ export function OptionsPage() {
                                                   : 'bg-white border-border hover:bg-muted/50'
                                             }`}
                                           >
+                                            {(valueHandle) => (
+                                            <>
+                                            {valueHandle({ label: value.value, size: 'sm' })}
                                             <button
                                               type="button"
                                               onClick={() => openEditValueDialog(value)}
@@ -814,31 +904,51 @@ export function OptionsPage() {
                                             >
                                               <Trash2 className="h-3 w-3 text-destructive" />
                                             </button>
-                                          </div>
+                                            </>
+                                            )}
+                                          </SortableItem>
                                         )
                                       })}
                                       {attr.values.length === 0 && (
                                         <span className="text-sm text-muted-foreground italic">값이 없습니다</span>
                                       )}
-                                    </>
+                                    </SortableGroup>
                                   )}
                                 </div>
                               </div>
 
                               {/* 하위 속성들 재귀 렌더링 */}
                               {childAttributes.length > 0 && (
-                                <div className="ml-6 border-l-2 border-primary/40 pl-4 space-y-2">
-                                  {childAttributes.map((childAttr) => renderAttributeTree(childAttr, depth + 1))}
+                                <div className="ml-6 mt-2 border-l-2 border-primary/40 pl-4 space-y-2">
+                                  {renderSiblings(childAttributes, depth + 1)}
                                 </div>
                               )}
-                            </div>
+                            </>
+                              )}
+                            </SortableItem>
                           )
                         }
 
+                        // 같은 상위를 가진 형제 속성 묶음 — 이 안에서만 드래그로 순서 변경
+                        const renderSiblings = (siblings: OptionAttribute[], depth: number): React.ReactNode => (
+                          <SortableGroup
+                            ids={siblings.map((a) => a.id)}
+                            onReorder={(ids) =>
+                              reorderAttributesMutation.mutate({
+                                optionId: option.id,
+                                ids: mergeSiblingOrder(option.attributes.map((a) => a.id), ids),
+                              })
+                            }
+                          >
+                            {siblings.map((sibling) => renderAttributeTree(sibling, depth))}
+                          </SortableGroup>
+                        )
+
                         // 최상위 속성들(하위가 아닌 속성들)만 렌더링 시작점
-                        return option.attributes
-                          .filter((attr) => !attr.isChildAttribute)
-                          .map((attr) => renderAttributeTree(attr, 0))
+                        return renderSiblings(
+                          option.attributes.filter((attr) => !attr.isChildAttribute),
+                          0
+                        )
                       })()}
 
                       {/* 연결되지 않은 하위 속성 (상위가 삭제된 경우 등) */}

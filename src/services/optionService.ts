@@ -10,6 +10,7 @@ import type {
   AttributeValueUpdateRequest,
   ProductOption,
   ProductOptionUpdateRequest,
+  ProductOptionCopyResult,
 } from '@/types/option'
 
 export const optionService = {
@@ -82,7 +83,25 @@ export const optionService = {
     await api.delete(`/options/values/${valueId}`)
   },
 
+  /** 옵션 내 속성 순서 변경 (새 순서의 속성 id 목록) */
+  async reorderAttributes(optionId: number, ids: number[]): Promise<Option> {
+    const response = await api.put(`/options/${optionId}/attributes/order`, { ids })
+    return response.data.data
+  },
+
+  /** 속성 내 값 순서 변경 (새 순서의 값 id 목록) */
+  async reorderAttributeValues(attributeId: number, ids: number[]): Promise<OptionAttribute> {
+    const response = await api.put(`/options/attributes/${attributeId}/values/order`, { ids })
+    return response.data.data
+  },
+
   // === 상품 옵션 API ===
+
+  /** 상품의 옵션 연결을 다른 상품들에 복사 (대상의 기존 옵션은 유지, 없는 옵션만 추가) */
+  async copyProductOptions(sourceProductId: number, targetProductIds: number[]): Promise<ProductOptionCopyResult> {
+    const response = await api.post(`/products/${sourceProductId}/options/copy`, { targetProductIds })
+    return response.data.data
+  },
 
   /** 상품의 옵션 목록 조회 */
   async getProductOptions(productId: number): Promise<ProductOption[]> {

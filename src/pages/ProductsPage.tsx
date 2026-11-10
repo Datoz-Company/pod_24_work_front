@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Edit, Trash2, Search, Sliders, X, Pencil } from 'lucide-react'
+import { Plus, Edit, Trash2, Search, Sliders, X, Pencil, Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import { productService } from '@/services/productService'
 import { optionService } from '@/services/optionService'
@@ -35,9 +35,11 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { CategoryCombobox } from '@/components/features/product/CategoryCombobox'
+import { CopyProductOptionsDialog } from '@/components/features/product/CopyProductOptionsDialog'
+import { SortableGroup, SortableItem } from '@/components/features/option/SortableList'
 import { getCategories, UNCATEGORIZED } from '@/components/features/order/OrderItemCard'
 import type { Product, ProductCreateRequest } from '@/types'
-import type { Option, ProductOptionItem } from '@/types/option'
+import type { Option, ProductOption, ProductOptionItem } from '@/types/option'
 import { OPTION_TYPE_LABELS } from '@/types/option'
 
 export function ProductsPage() {
@@ -45,6 +47,7 @@ export function ProductsPage() {
   const [search, setSearch] = useState('')
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isOptionDialogOpen, setIsOptionDialogOpen] = useState(false)
+  const [isCopyDialogOpen, setIsCopyDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [selectedProductForOptions, setSelectedProductForOptions] = useState<Product | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null)
@@ -141,6 +144,45 @@ export function ProductsPage() {
       queryClient.invalidateQueries({ queryKey: ['products'] })
     },
   })
+
+  // 상품 옵션 순서 변경 — 드롭 즉시 반영(낙관적 업데이트), 실패 시 되돌림
+  const reorderProductOptionsMutation = useMutation({
+    mutationFn: ({ productId, ordered }: { productId: number; ordered: ProductOption[] }) =>
+      optionService.updateProductOptions(productId, {
+        options: ordered.map((po, idx) => ({
+          optionId: po.optionId,
+          displayOrder: idx + 1,
+          isRequired: po.isRequired,
+        })),
+      }),
+    onMutate: async ({ productId, ordered }) => {
+      const queryKey = ['product-options', productId]
+      await queryClient.cancelQueries({ queryKey })
+      const previous = queryClient.getQueryData<ProductOption[]>(queryKey)
+      queryClient.setQueryData<ProductOption[]>(queryKey, ordered)
+      return { previous }
+    },
+    onError: (_error, { productId }, context) => {
+      if (context?.previous) queryClient.setQueryData(['product-options', productId], context.previous)
+      toast.error('옵션 순서 변경에 실패했습니다.')
+    },
+    onSettled: (_data, _error, { productId }) => {
+      queryClient.invalidateQueries({ queryKey: ['product-options', productId] })
+    },
+  })
+
+  const handleReorderOptions = (orderedIds: number[]) => {
+    if (!selectedProductForOptions) return
+    const byId = new Map(productOptions.map((po) => [po.id, po]))
+    const ordered: ProductOption[] = []
+    for (const id of orderedIds) {
+      const po = byId.get(id)
+      if (po) ordered.push(po)
+    }
+    reorderProductOptionsMutation.mutate({ productId: selectedProductForOptions.id, ordered })
+  }
+
+  const isSavingProductOptions = updateProductOptionsMutation.isPending || reorderProductOptionsMutation.isPending
 
   const closeDialog = () => {
     setIsDialogOpen(false)
@@ -401,19 +443,41 @@ export function ProductsPage() {
             <div className="space-y-4">
               {/* 연결된 옵션 목록 */}
               <div>
-                <Label className="text-sm font-medium">연결된 옵션</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">
+                    연결된 옵션
+                    {productOptions.length > 1 && (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">드래그해서 순서 변경</span>
+                    )}
+                  </Label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsCopyDialogOpen(true)}
+                    disabled={productOptions.length === 0 || isSavingProductOptions}
+                    title="이 상품의 옵션 구성을 다른 상품에도 연결"
+                  >
+                    <Copy className="h-4 w-4 mr-1" />
+                    다른 상품에 복사
+                  </Button>
+                </div>
                 {productOptions.length === 0 ? (
                   <p className="mt-2 text-sm text-muted-foreground">
                     연결된 옵션이 없습니다. 아래에서 옵션을 추가하세요.
                   </p>
                 ) : (
                   <div className="mt-2 space-y-2">
+                    <SortableGroup ids={productOptions.map((po) => po.id)} onReorder={handleReorderOptions}>
                     {productOptions.map((po) => (
-                      <div
+                      <SortableItem
                         key={po.id}
-                        className="flex items-center justify-between rounded-lg border p-3"
+                        id={po.id}
+                        className="flex items-center justify-between rounded-lg border bg-background p-3"
                       >
+                        {(handle) => (
+                        <>
                         <div className="flex items-center gap-2">
+                          {handle({ label: po.option?.name ?? '옵션' })}
                           <span className="font-medium">{po.option?.name}</span>
                           {po.isRequired && (
                             <Badge variant="destructive" className="text-xs">
@@ -429,7 +493,7 @@ export function ProductsPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => handleToggleRequired(po.optionId)}
-                            disabled={updateProductOptionsMutation.isPending}
+                            disabled={isSavingProductOptions}
                           >
                             {po.isRequired ? '선택으로 변경' : '필수로 변경'}
                           </Button>
@@ -437,13 +501,16 @@ export function ProductsPage() {
                             variant="ghost"
                             size="icon"
                             onClick={() => handleRemoveOption(po.optionId)}
-                            disabled={updateProductOptionsMutation.isPending}
+                            disabled={isSavingProductOptions}
                           >
                             <X className="h-4 w-4 text-destructive" />
                           </Button>
                         </div>
-                      </div>
+                        </>
+                        )}
+                      </SortableItem>
                     ))}
+                    </SortableGroup>
                   </div>
                 )}
               </div>
@@ -497,6 +564,15 @@ export function ProductsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 옵션 복사 대상 선택 */}
+      <CopyProductOptionsDialog
+        open={isCopyDialogOpen}
+        onOpenChange={setIsCopyDialogOpen}
+        sourceProduct={selectedProductForOptions}
+        sourceOptions={productOptions}
+        products={allProducts}
+      />
 
       {/* 상품 삭제 확인 */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>

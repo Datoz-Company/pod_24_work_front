@@ -147,6 +147,16 @@ export interface ProductOptionUpdateRequest {
   options: ProductOptionItem[]
 }
 
+/** 상품 옵션 복사 결과 */
+export interface ProductOptionCopyResult {
+  /** 복사 대상 상품 수 */
+  productCount: number
+  /** 새로 연결된 옵션 수 */
+  addedCount: number
+  /** 이미 연결되어 있어 건너뛴 옵션 수 */
+  skippedCount: number
+}
+
 export interface WorkOrderOptionRequest {
   optionId: number
   selectedAttributeValueIds: number[]
