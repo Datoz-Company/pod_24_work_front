@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, Link2, Unlink, GitBranch, CornerDownRight, AlertTriangle, Info, Check } from 'lucide-react'
+import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, Link2, Unlink, GitBranch, CornerDownRight, AlertTriangle, Info, Check, Copy } from 'lucide-react'
 import { optionService } from '@/services/optionService'
 import { SortableGroup, SortableItem } from '@/components/features/option/SortableList'
 import { Button } from '@/components/ui/button'
@@ -95,6 +95,9 @@ export function OptionsPage() {
 
   // 편집 대상
   const [editingOption, setEditingOption] = useState<Option | null>(null)
+  // 복제할 옵션과 새 옵션 이름
+  const [copySource, setCopySource] = useState<Option | null>(null)
+  const [copyName, setCopyName] = useState('')
   const [selectedOptionId, setSelectedOptionId] = useState<number | null>(null)
   const [selectedAttributeId, setSelectedAttributeId] = useState<number | null>(null)
   // 수정 중인 속성/속성값 (null이면 추가 모드)
@@ -157,6 +160,30 @@ export function OptionsPage() {
       closeOptionDialog()
     },
   })
+
+  const copyOptionMutation = useMutation({
+    mutationFn: ({ id, name }: { id: number; name: string }) => optionService.copyOption(id, name),
+    onSuccess: (created) => {
+      queryClient.invalidateQueries({ queryKey: ['options'] })
+      // 새 옵션을 펼쳐서 바로 확인할 수 있게 함
+      setExpandedOptions((prev) => new Set(prev).add(created.id))
+      setCopySource(null)
+      toast.success(`'${created.name}' 옵션을 만들었습니다`)
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || '옵션 복제에 실패했습니다')
+    },
+  })
+
+  const submitCopy = () => {
+    if (!copySource || !copyName.trim() || copyOptionMutation.isPending) return
+    copyOptionMutation.mutate({ id: copySource.id, name: copyName })
+  }
+
+  const openCopyDialog = (option: Option) => {
+    setCopySource(option)
+    setCopyName(`${option.name} (복사)`)
+  }
 
   const deleteOptionMutation = useMutation({
     mutationFn: optionService.delete,
@@ -656,8 +683,18 @@ export function OptionsPage() {
                       variant="ghost"
                       size="sm"
                       onClick={() => openOptionDialog(option)}
+                      aria-label={`${option.name} 수정`}
                     >
                       <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openCopyDialog(option)}
+                      title="옵션 복제"
+                      aria-label={`${option.name} 복제`}
+                    >
+                      <Copy className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -977,6 +1014,50 @@ export function OptionsPage() {
           ))}
         </div>
       )}
+
+      {/* 옵션 복제 다이얼로그 */}
+      <Dialog open={copySource != null} onOpenChange={(open) => !open && setCopySource(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>옵션 복제 - {copySource?.name}</DialogTitle>
+            <DialogDescription>
+              속성 {copySource?.attributes?.length ?? 0}개와 값, 하위 연결까지 그대로 복사한 새 옵션을 만듭니다.
+              상품 연결은 복사하지 않습니다.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-2"
+            onSubmit={(e) => {
+              e.preventDefault()
+              submitCopy()
+            }}
+          >
+            <Label htmlFor="copy-option-name">새 옵션명 *</Label>
+            <Input
+              id="copy-option-name"
+              value={copyName}
+              onChange={(e) => setCopyName(e.target.value)}
+              onKeyDown={(e) => {
+                // 한글 조합 중 Enter는 글자 확정용이므로 제출하지 않음
+                if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+                  e.preventDefault()
+                  submitCopy()
+                }
+              }}
+              maxLength={200}
+              autoFocus
+            />
+            <DialogFooter className="pt-2">
+              <Button type="button" variant="outline" onClick={() => setCopySource(null)}>
+                취소
+              </Button>
+              <Button type="submit" disabled={!copyName.trim() || copyOptionMutation.isPending}>
+                {copyOptionMutation.isPending ? '복제 중...' : '복제'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* 옵션 생성/수정 다이얼로그 */}
       <Dialog open={isOptionDialogOpen} onOpenChange={setIsOptionDialogOpen}>

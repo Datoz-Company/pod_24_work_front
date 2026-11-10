@@ -95,6 +95,12 @@ export const optionService = {
     return response.data.data
   },
 
+  /** 옵션 복제 (속성·속성값·옵션 내부 연결 포함, 상품 연결 제외). name을 비우면 "원본 (복사)"로 지정 */
+  async copyOption(optionId: number, name?: string): Promise<Option> {
+    const response = await api.post(`/options/${optionId}/copy`, { name: name?.trim() || null })
+    return response.data.data
+  },
+
   // === 상품 옵션 API ===
 
   /** 상품의 옵션 연결을 다른 상품들에 복사 (대상의 기존 옵션은 유지, 없는 옵션만 추가) */
