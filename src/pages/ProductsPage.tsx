@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Edit, Trash2, Search, Sliders, X, Pencil, Copy } from 'lucide-react'
+import { Plus, Edit, Trash2, Search, Sliders, X, Pencil, Copy, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import { productService } from '@/services/productService'
 import { optionService } from '@/services/optionService'
@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { CategoryCombobox } from '@/components/features/product/CategoryCombobox'
 import { CopyProductOptionsDialog } from '@/components/features/product/CopyProductOptionsDialog'
+import { ImportProductOptionsDialog } from '@/components/features/product/ImportProductOptionsDialog'
 import { SortableGroup, SortableItem } from '@/components/features/option/SortableList'
 import { getCategories, UNCATEGORIZED } from '@/components/features/order/OrderItemCard'
 import type { Product, ProductCreateRequest } from '@/types'
@@ -48,6 +49,7 @@ export function ProductsPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isOptionDialogOpen, setIsOptionDialogOpen] = useState(false)
   const [isCopyDialogOpen, setIsCopyDialogOpen] = useState(false)
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [selectedProductForOptions, setSelectedProductForOptions] = useState<Product | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null)
@@ -443,27 +445,47 @@ export function ProductsPage() {
             <div className="space-y-4">
               {/* 연결된 옵션 목록 */}
               <div>
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <Label className="text-sm font-medium">
                     연결된 옵션
                     {productOptions.length > 1 && (
                       <span className="ml-2 text-xs font-normal text-muted-foreground">드래그해서 순서 변경</span>
                     )}
                   </Label>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsCopyDialogOpen(true)}
-                    disabled={productOptions.length === 0 || isSavingProductOptions}
-                    title="이 상품의 옵션 구성을 다른 상품에도 연결"
-                  >
-                    <Copy className="h-4 w-4 mr-1" />
-                    다른 상품에 복사
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsImportDialogOpen(true)}
+                      disabled={isSavingProductOptions}
+                      title="다른 상품의 옵션 구성을 이 상품으로 가져오기"
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      다른 상품에서 가져오기
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsCopyDialogOpen(true)}
+                      disabled={productOptions.length === 0 || isSavingProductOptions}
+                      title="이 상품의 옵션 구성을 다른 상품에도 연결"
+                    >
+                      <Copy className="h-4 w-4 mr-1" />
+                      다른 상품에 복사
+                    </Button>
+                  </div>
                 </div>
                 {productOptions.length === 0 ? (
                   <p className="mt-2 text-sm text-muted-foreground">
-                    연결된 옵션이 없습니다. 아래에서 옵션을 추가하세요.
+                    연결된 옵션이 없습니다. 아래에서 옵션을 추가하거나{' '}
+                    <button
+                      type="button"
+                      onClick={() => setIsImportDialogOpen(true)}
+                      className="font-medium text-primary underline-offset-2 hover:underline"
+                    >
+                      다른 상품에서 가져오세요
+                    </button>
+                    .
                   </p>
                 ) : (
                   <div className="mt-2 space-y-2">
@@ -571,6 +593,15 @@ export function ProductsPage() {
         onOpenChange={setIsCopyDialogOpen}
         sourceProduct={selectedProductForOptions}
         sourceOptions={productOptions}
+        products={allProducts}
+      />
+
+      {/* 옵션 가져올 원본 선택 */}
+      <ImportProductOptionsDialog
+        open={isImportDialogOpen}
+        onOpenChange={setIsImportDialogOpen}
+        targetProduct={selectedProductForOptions}
+        targetOptions={productOptions}
         products={allProducts}
       />
 
