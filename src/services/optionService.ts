@@ -101,6 +101,18 @@ export const optionService = {
     return response.data.data
   },
 
+  /**
+   * 속성 복사 (값·하위 속성 포함). 복사본이 들어간 옵션을 반환
+   * targetOptionId를 비우면 같은 옵션에 복사, name을 비우면 서버가 기본 이름 지정
+   */
+  async copyAttribute(attributeId: number, data: { targetOptionId?: number; name?: string }): Promise<Option> {
+    const response = await api.post(`/options/attributes/${attributeId}/copy`, {
+      targetOptionId: data.targetOptionId ?? null,
+      name: data.name?.trim() || null,
+    })
+    return response.data.data
+  },
+
   // === 상품 옵션 API ===
 
   /** 상품의 옵션 연결을 다른 상품들에 복사 (대상의 기존 옵션은 유지, 없는 옵션만 추가) */
