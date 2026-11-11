@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, Link2, Unlink, GitBranch, CornerDownRight, AlertTriangle, Info, Check, Copy } from 'lucide-react'
 import { optionService } from '@/services/optionService'
 import { SortableGroup, SortableItem } from '@/components/features/option/SortableList'
+import { CopyAttributeDialog, type CopyAttributeSource } from '@/components/features/option/CopyAttributeDialog'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -98,6 +99,8 @@ export function OptionsPage() {
   // 복제할 옵션과 새 옵션 이름
   const [copySource, setCopySource] = useState<Option | null>(null)
   const [copyName, setCopyName] = useState('')
+  // 복사할 속성
+  const [copyAttributeSource, setCopyAttributeSource] = useState<CopyAttributeSource | null>(null)
   const [selectedOptionId, setSelectedOptionId] = useState<number | null>(null)
   const [selectedAttributeId, setSelectedAttributeId] = useState<number | null>(null)
   // 수정 중인 속성/속성값 (null이면 추가 모드)
@@ -815,6 +818,16 @@ export function OptionsPage() {
                                     >
                                       <Pencil className="h-4 w-4" />
                                     </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8"
+                                      onClick={() => setCopyAttributeSource({ attribute: attr, option })}
+                                      aria-label={`${attr.name} 속성 복사`}
+                                      title="속성 복사 (값 포함)"
+                                    >
+                                      <Copy className="h-4 w-4" />
+                                    </Button>
                                     {/* 하위 속성 연결 버튼 - 모든 속성에 표시 */}
                                     <Button
                                       variant={hasChildren ? 'default' : 'outline'}
@@ -1014,6 +1027,14 @@ export function OptionsPage() {
           ))}
         </div>
       )}
+
+      {/* 속성 복사 다이얼로그 */}
+      <CopyAttributeDialog
+        source={copyAttributeSource}
+        options={options}
+        onClose={() => setCopyAttributeSource(null)}
+        onCopied={(optionId) => setExpandedOptions((prev) => new Set(prev).add(optionId))}
+      />
 
       {/* 옵션 복제 다이얼로그 */}
       <Dialog open={copySource != null} onOpenChange={(open) => !open && setCopySource(null)}>
