@@ -1,4 +1,10 @@
 import api from './api'
+
+/** 복사 · 가져오기 범위 (생략하면 전체) */
+export interface CopySelectionRequest {
+  attributeIds: number[]
+  valueIds: number[]
+}
 import type {
   Option,
   OptionCreateRequest,
@@ -96,8 +102,12 @@ export const optionService = {
   },
 
   /** 옵션 복제 (속성·속성값·옵션 내부 연결 포함, 상품 연결 제외). name을 비우면 "원본 (복사)"로 지정 */
-  async copyOption(optionId: number, name?: string): Promise<Option> {
-    const response = await api.post(`/options/${optionId}/copy`, { name: name?.trim() || null })
+  async copyOption(optionId: number, name?: string, selection?: CopySelectionRequest): Promise<Option> {
+    const response = await api.post(`/options/${optionId}/copy`, {
+      name: name?.trim() || null,
+      attributeIds: selection?.attributeIds ?? null,
+      valueIds: selection?.valueIds ?? null,
+    })
     return response.data.data
   },
 
@@ -105,10 +115,36 @@ export const optionService = {
    * 속성 복사 (값·하위 속성 포함). 복사본이 들어간 옵션을 반환
    * targetOptionId를 비우면 같은 옵션에 복사, name을 비우면 서버가 기본 이름 지정
    */
-  async copyAttribute(attributeId: number, data: { targetOptionId?: number; name?: string }): Promise<Option> {
+  async copyAttribute(
+    attributeId: number,
+    data: { targetOptionId?: number; name?: string; selection?: CopySelectionRequest }
+  ): Promise<Option> {
     const response = await api.post(`/options/attributes/${attributeId}/copy`, {
       targetOptionId: data.targetOptionId ?? null,
       name: data.name?.trim() || null,
+      attributeIds: data.selection?.attributeIds ?? null,
+      valueIds: data.selection?.valueIds ?? null,
+    })
+    return response.data.data
+  },
+
+  /**
+   * 다른 옵션의 속성(+값)을 이 옵션에 새 속성으로 가져옵니다.
+   *
+   * @param {number} optionId - 속성을 받을 옵션
+   * @param {number} sourceOptionId - 속성을 가져올 옵션
+   * @param {CopySelectionRequest} [selection] - 가져올 속성 · 값 (없으면 전체)
+   * @returns 속성을 가져온 옵션과 추가된 속성 · 값 수
+   */
+  async importAttributes(
+    optionId: number,
+    sourceOptionId: number,
+    selection?: CopySelectionRequest
+  ): Promise<{ option: Option; attributeCount: number; valueCount: number }> {
+    const response = await api.post(`/options/${optionId}/import-attributes`, {
+      sourceOptionId,
+      attributeIds: selection?.attributeIds ?? null,
+      valueIds: selection?.valueIds ?? null,
     })
     return response.data.data
   },

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { optionService } from '@/services/optionService'
@@ -15,6 +15,13 @@ import {
 } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { Option, OptionAttribute } from '@/types/option'
+import {
+  CopySelectionTree,
+  effectiveSelection,
+  orderAttributes,
+  selectAll,
+  type CopySelectionState,
+} from './CopySelectionTree'
 
 export interface CopyAttributeSource {
   attribute: OptionAttribute
@@ -70,19 +77,27 @@ export function CopyAttributeDialog({ source, options, onClose, onCopied }: Copy
   const [name, setName] = useState('')
   // 사용자가 이름을 직접 고쳤으면 대상 옵션을 바꿔도 이름을 덮어쓰지 않음
   const [nameEdited, setNameEdited] = useState(false)
+  // 복사할 범위 (이 속성 + 하위 속성 · 값), 기본 전체
+  const rows = useMemo(
+    () => (source ? orderAttributes(source.option.attributes ?? [], source.attribute.id) : []),
+    [source]
+  )
+  const [selection, setSelection] = useState<CopySelectionState>({ attributeIds: new Set(), valueIds: new Set() })
 
   useEffect(() => {
     if (!source) return
     setTargetOptionId(source.option.id)
     setName(defaultName(source, source.option.id))
     setNameEdited(false)
-  }, [source])
+    setSelection(selectAll(rows))
+  }, [source, rows])
 
   const copyMutation = useMutation({
     mutationFn: () =>
       optionService.copyAttribute(source!.attribute.id, {
         targetOptionId: targetOptionId ?? undefined,
         name,
+        selection: effectiveSelection(rows, selection),
       }),
     onSuccess: (option) => {
       queryClient.invalidateQueries({ queryKey: ['options'] })
@@ -109,17 +124,25 @@ export function CopyAttributeDialog({ source, options, onClose, onCopied }: Copy
   const childCount = source ? countDescendants(source.option.attributes ?? [], source.attribute.id) : 0
   const valueCount = source?.attribute.values?.length ?? 0
   const sameOption = source != null && targetOptionId === source.option.id
+  const targetOption = options.find((option) => option.id === targetOptionId)
 
   return (
     <Dialog open={source != null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>속성 복사 - {source?.attribute.name}</DialogTitle>
           <DialogDescription>
-            값 {valueCount}개
-            {childCount > 0 && <>와 하위 속성 {childCount}개(값 · 연결 포함)</>}를 함께 복사합니다.
+            이 속성을 값 {valueCount}개
+            {childCount > 0 && <>, 하위 속성 {childCount}개(값 · 연결 포함)</>}와 함께 복사합니다. 아래에서 뺄 항목의 체크를
+            해제하세요.
           </DialogDescription>
         </DialogHeader>
+        {source != null && valueCount === 0 && childCount === 0 && (
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            이 속성에는 값이 없어 빈 속성만 복사됩니다. 다른 옵션의 속성과 값을 이 옵션으로 가져오려면 옵션 카드의
+            <b> 가져오기</b> 아이콘(복제 아이콘 옆)을 사용하세요.
+          </p>
+        )}
         <form
           className="space-y-4"
           onSubmit={(e) => {
@@ -128,9 +151,9 @@ export function CopyAttributeDialog({ source, options, onClose, onCopied }: Copy
           }}
         >
           <div className="space-y-2">
-            <Label>복사할 옵션</Label>
+            <Label>어디로 복사할까요?</Label>
             <Select value={targetOptionId != null ? String(targetOptionId) : undefined} onValueChange={changeTarget}>
-              <SelectTrigger aria-label="복사할 옵션">
+              <SelectTrigger aria-label="복사해 넣을 옵션">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -142,6 +165,11 @@ export function CopyAttributeDialog({ source, options, onClose, onCopied }: Copy
                 ))}
               </SelectContent>
             </Select>
+            {targetOption && (
+              <p className="text-xs font-medium text-gray-700">
+                {source?.option.name} › {source?.attribute.name} → {targetOption.name}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
               {sameOption
                 ? source?.attribute.parentAttributeId != null
@@ -170,6 +198,17 @@ export function CopyAttributeDialog({ source, options, onClose, onCopied }: Copy
               autoFocus
             />
           </div>
+          {(valueCount > 0 || childCount > 0) && (
+            <div className="space-y-2">
+              <Label>복사할 내용</Label>
+              <CopySelectionTree
+                rows={rows}
+                selection={selection}
+                onChange={setSelection}
+                lockedAttributeId={source?.attribute.id}
+              />
+            </div>
+          )}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>
               취소
