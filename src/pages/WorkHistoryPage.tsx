@@ -15,8 +15,17 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { formatDateTime } from '@/lib/format'
+import { WORK_ORDER_STATUS } from '@/lib/status'
+import type { WorkOrderStatus } from '@/types'
 
 const PAGE_SIZE = 20
+
+// 작업 내역의 상태 배지 — 작업 완료 / 배송중 / 배송 완료
+const HISTORY_BADGE_CLASS: Partial<Record<WorkOrderStatus, string>> = {
+  COMPLETED: 'bg-green-100 text-green-700 hover:bg-green-100',
+  SHIPPING: 'bg-amber-100 text-amber-700 hover:bg-amber-100',
+  DELIVERED: 'bg-gray-100 text-gray-700 hover:bg-gray-100',
+}
 
 export function WorkHistoryPage() {
   const navigate = useNavigate()
@@ -45,7 +54,9 @@ export function WorkHistoryPage() {
     <div className="p-6">
       <div className="mb-6">
         <h1 className="text-2xl font-bold">작업 내역</h1>
-        <p className="text-muted-foreground">완료된 작업지시서 목록입니다. 행을 누르면 상세 화면으로 이동합니다.</p>
+        <p className="text-muted-foreground">
+          작업 완료 · 배송중 · 배송 완료된 작업지시서 목록입니다. 행을 누르면 상세 화면으로 이동합니다.
+        </p>
       </div>
 
       <div className="relative mb-4 max-w-sm">
@@ -71,6 +82,7 @@ export function WorkHistoryPage() {
                 <TableHead>고객</TableHead>
                 <TableHead>수량</TableHead>
                 <TableHead>완료일</TableHead>
+                <TableHead>배송 완료일</TableHead>
                 <TableHead>상태</TableHead>
               </TableRow>
             </TableHeader>
@@ -95,14 +107,17 @@ export function WorkHistoryPage() {
                       ? formatDateTime(workOrder.completedAt)
                       : '-'}
                   </TableCell>
+                  <TableCell>{workOrder.deliveredAt ? formatDateTime(workOrder.deliveredAt) : '-'}</TableCell>
                   <TableCell>
-                    <Badge variant="success">완료</Badge>
+                    <Badge className={HISTORY_BADGE_CLASS[workOrder.status] ?? ''} variant="outline">
+                      {WORK_ORDER_STATUS[workOrder.status]?.label ?? workOrder.status}
+                    </Badge>
                   </TableCell>
                 </TableRow>
               ))}
               {workOrders.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground">
                     {keyword ? '검색 결과가 없습니다' : '완료된 작업이 없습니다'}
                   </TableCell>
                 </TableRow>

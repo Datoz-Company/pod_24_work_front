@@ -56,7 +56,7 @@ import { SHIPPING_METHOD_LABELS } from '@/types'
 import { cn, isNotNil } from '@/lib/utils'
 import { toOptionRequest } from '@/lib/optionSnapshot'
 import type { ProcessStatus } from '@/types'
-import { PROCESS_STATUS, WORK_ORDER_STATUS } from '@/lib/status'
+import { PROCESS_STATUS, WORK_ORDER_STATUS, isWorkDone } from '@/lib/status'
 import { formatDateTime, formatDueDate, isOverdue } from '@/lib/format'
 import { invalidateWorkData } from '@/lib/queryInvalidation'
 
@@ -344,7 +344,7 @@ export function WorkOrderDetailPage() {
               <div className="text-xs text-muted-foreground mb-1">출고 예정일</div>
               <div className={cn(
                 "text-sm font-medium",
-                isOverdue(workOrder.dueDate) && workOrder.status !== 'COMPLETED' && "text-destructive"
+                isOverdue(workOrder.dueDate) && !isWorkDone(workOrder.status) && "text-destructive"
               )}>
                 {formatDueDate(workOrder.dueDate)}
               </div>
@@ -410,7 +410,7 @@ export function WorkOrderDetailPage() {
                   <>
                     <span className="text-muted-foreground">출고 예정일</span>
                     <span className={cn(
-                      isOverdue(workOrder.dueDate) && workOrder.status !== 'COMPLETED' && "text-destructive"
+                      isOverdue(workOrder.dueDate) && !isWorkDone(workOrder.status) && "text-destructive"
                     )}>
                       {formatDueDate(workOrder.dueDate)}
                     </span>
