@@ -49,7 +49,7 @@ import { WorkOrderOptionsView } from '@/components/features/option/WorkOrderOpti
 import { EditWorkOrderDialog } from '@/components/features/work-order/EditWorkOrderDialog'
 import { WorkOrderMemoEditor } from './WorkOrderMemoEditor'
 import type { ProcessStatus } from '@/types'
-import { PROCESS_STATUS, WORK_ORDER_STATUS } from '@/lib/status'
+import { PROCESS_STATUS, WORK_ORDER_STATUS, isWorkDone } from '@/lib/status'
 import { formatDueDate, isOverdue } from '@/lib/format'
 import { invalidateWorkData } from '@/lib/queryInvalidation'
 
@@ -225,13 +225,13 @@ export function WorkOrderPeekPanel({
                   <span className="text-sm text-muted-foreground">출고 예정일</span>
                   <span
                     className={`ml-auto text-sm font-medium ${
-                      isOverdue(workOrder.dueDate) && workOrder.status !== 'COMPLETED'
+                      isOverdue(workOrder.dueDate) && !isWorkDone(workOrder.status)
                         ? 'text-destructive'
                         : ''
                     }`}
                   >
                     {formatDueDate(workOrder.dueDate)}
-                    {isOverdue(workOrder.dueDate) && workOrder.status !== 'COMPLETED' && (
+                    {isOverdue(workOrder.dueDate) && !isWorkDone(workOrder.status) && (
                       <span className="ml-1 text-xs">(지연)</span>
                     )}
                   </span>

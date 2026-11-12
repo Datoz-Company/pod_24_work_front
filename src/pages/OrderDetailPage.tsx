@@ -45,7 +45,7 @@ import { ORDER_SOURCE_LABELS, SHIPPING_METHOD_LABELS, type OrderStatus } from '@
 import { OrderFilesPanel } from '@/components/features/order/OrderFilesPanel'
 import { excelService, type DocumentFormat } from '@/services/excelService'
 import { toast } from 'sonner'
-import { ORDER_STATUS, WORK_ORDER_STATUS } from '@/lib/status'
+import { ORDER_STATUS, WORK_ORDER_STATUS, isWorkDone } from '@/lib/status'
 import { formatDate, formatDateTime, formatDueDate, isOverdue } from '@/lib/format'
 import { invalidateWorkData } from '@/lib/queryInvalidation'
 
@@ -100,7 +100,7 @@ export function OrderDetailPage() {
 
   // 완료 수량 계산 (완료된 작업의 수량 합)
   const completedQuantity = useMemo(() => {
-    return order?.workOrders?.filter(wo => wo.status === 'COMPLETED')
+    return order?.workOrders?.filter(wo => isWorkDone(wo.status))
       .reduce((sum, wo) => sum + wo.quantity, 0) || 0
   }, [order])
 

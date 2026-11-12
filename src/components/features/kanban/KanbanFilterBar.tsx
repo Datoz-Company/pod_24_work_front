@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { KanbanCard, KanbanColumn } from '@/types'
+import { isWorkDone } from '@/lib/status'
 
 export type DueFilter = 'ALL' | 'TODAY' | 'THIS_WEEK' | 'OVERDUE'
 
@@ -51,7 +52,7 @@ function matchesDue(card: KanbanCard, due: DueFilter, today: Date): boolean {
     case 'THIS_WEEK':
       return !isBefore(dueDate, today) && !isBefore(endOfWeek(today, { weekStartsOn: 1 }), dueDate)
     case 'OVERDUE':
-      return isBefore(dueDate, today) && card.workOrderStatus !== 'COMPLETED'
+      return isBefore(dueDate, today) && !isWorkDone(card.workOrderStatus)
   }
 }
 

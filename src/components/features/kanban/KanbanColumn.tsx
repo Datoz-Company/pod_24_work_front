@@ -28,6 +28,7 @@ const getColumnBgColor = (process: KanbanColumnType['process']): string => {
   if (process.isSystem) {
     if (process.systemType === 'PENDING') return '#F2F2F2' // 대기중: 연한 회색
     if (process.systemType === 'COMPLETED') return '#E8EFFF' // 작업 완료: 연한 파란색
+    if (process.systemType === 'SHIPPING') return '#FFF6E5' // 배송중: 연한 주황색
   }
   // 일반 공정: 공정 색상을 연하게 적용
   return hexToLightBg(process.color)

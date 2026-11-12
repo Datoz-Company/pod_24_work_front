@@ -45,6 +45,18 @@ interface KanbanBoardProps {
 
 const COLUMN_WIDTH = 280
 
+/**
+ * 작업 완료 · 배송중 컬럼의 품목 행인지 판별 (완료 공정 미니 카드는 제외)
+ *
+ * @param {KanbanCardType} card - 드래그 중인 카드
+ * @param {boolean} isMiniCard - 완료 공정 미니 카드 여부
+ * @returns {'completed' | 'shipping' | null} 작업 완료 품목 / 배송중 품목 / 해당 없음
+ */
+function getDoneCardKind(card: KanbanCardType, isMiniCard: boolean): 'completed' | 'shipping' | null {
+  if (isMiniCard || card.completedProcessInfos == null) return null
+  return card.workOrderStatus === 'SHIPPING' ? 'shipping' : 'completed'
+}
+
 export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
   const queryClient = useQueryClient()
   const [activeCard, setActiveCard] = useState<KanbanCardType | null>(null)
@@ -52,6 +64,8 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
   const [isDraggingFromPending, setIsDraggingFromPending] = useState(false)
   const [isDraggingFromMiddle, setIsDraggingFromMiddle] = useState(false)
   const [isOverProcessGroup, setIsOverProcessGroup] = useState(false)
+  // 작업 완료 품목(→ 배송중) / 배송중 품목(→ 작업 완료) 드래그 중
+  const [draggingDoneKind, setDraggingDoneKind] = useState<'completed' | 'shipping' | null>(null)
 
   // Peek 패널 상태
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState<number | null>(null)
@@ -121,6 +135,9 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
     onSuccess: () => {
       invalidateWorkData(queryClient)
     },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || '카드 이동에 실패했습니다')
+    },
   })
 
   const startWorkMutation = useMutation({
@@ -152,8 +169,8 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
     },
   })
 
-  // 컬럼 분류: 대기중, 중간 공정, 작업 완료 (필터 적용 후)
-  const { pendingColumns, middleColumns, completedColumns } = useMemo(() => {
+  // 컬럼 분류: 대기중, 중간 공정, 작업 완료, 배송중 (필터 적용 후)
+  const { pendingColumns, middleColumns, completedColumns, shippingColumns } = useMemo(() => {
     const visibleColumns = applyKanbanFilter(columns, filter)
     const pending = visibleColumns.filter(
       (c) => c.process.isSystem && c.process.systemType === 'PENDING'
@@ -162,7 +179,10 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
     const completed = visibleColumns.filter(
       (c) => c.process.isSystem && c.process.systemType === 'COMPLETED'
     )
-    return { pendingColumns: pending, middleColumns: middle, completedColumns: completed }
+    const shipping = visibleColumns.filter(
+      (c) => c.process.isSystem && c.process.systemType === 'SHIPPING'
+    )
+    return { pendingColumns: pending, middleColumns: middle, completedColumns: completed, shippingColumns: shipping }
   }, [columns, filter])
 
   const sensors = useSensors(
@@ -225,6 +245,9 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
         card.workOrderStatus === 'IN_PROGRESS' &&
         card.processStatus !== 'COMPLETED'
       setIsDraggingFromMiddle(isFromMiddle)
+
+      // 작업 완료 · 배송중 컬럼의 품목 (미니 카드가 아닌 품목 행 자체)
+      setDraggingDoneKind(getDoneCardKind(card, isMiniCard))
     }
   }
 
@@ -254,6 +277,7 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
     setIsDraggingFromPending(false)
     setIsDraggingFromMiddle(false)
     setIsOverProcessGroup(false)
+    setDraggingDoneKind(null)
 
     if (!over) return
 
@@ -276,6 +300,25 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
       }
 
       // 다른 곳에 드롭한 경우 아무 동작 안함
+      return
+    }
+
+    // 작업 완료 품목 → 배송중, 배송중 품목 → 작업 완료 (그 외 컬럼으로는 이동하지 않음)
+    const doneKind = getDoneCardKind(activeCard, isMiniCard)
+    if (doneKind) {
+      const overColumn = over.data.current?.column as KanbanColumnType | undefined
+      const targetType = overColumn?.process.isSystem ? overColumn.process.systemType : undefined
+      if (doneKind === 'completed' && targetType === 'SHIPPING') {
+        moveMutation.mutate(
+          { workOrderId: activeCard.workOrderId, targetProcessId: overColumn!.process.id },
+          { onSuccess: () => toast.success('배송중으로 이동했습니다. 2일 뒤 0시에 배송 완료로 바뀝니다') }
+        )
+      } else if (doneKind === 'shipping' && targetType === 'COMPLETED') {
+        moveMutation.mutate(
+          { workOrderId: activeCard.workOrderId, targetProcessId: overColumn!.process.id },
+          { onSuccess: () => toast.success('작업 완료로 되돌렸습니다') }
+        )
+      }
       return
     }
 
@@ -396,8 +439,10 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
   // 중간 공정 컬럼 하이라이트: 대기중에서 드래그 중이거나, 미니 카드 드래그 중일 때
   // (중간 공정 카드 드래그 중에는 하이라이트 안 함)
   const shouldHighlightMiddleColumns = isDraggingFromPending || isDraggingMiniCard
-  // 작업 완료 컬럼 하이라이트: 중간 공정 카드 드래그 중일 때
-  const shouldHighlightCompletedColumn = isDraggingFromMiddle
+  // 작업 완료 컬럼 하이라이트: 중간 공정 카드 또는 배송중 품목 드래그 중일 때
+  const shouldHighlightCompletedColumn = isDraggingFromMiddle || draggingDoneKind === 'shipping'
+  // 배송중 컬럼 하이라이트: 작업 완료 품목 드래그 중일 때
+  const shouldHighlightShippingColumn = draggingDoneKind === 'completed'
 
   const handleCardClick = (card: KanbanCardType) => {
     setSelectedWorkOrderId(card.workOrderId)
@@ -504,6 +549,16 @@ export function KanbanBoard({ orderId, onCardClick }: KanbanBoardProps) {
                 column={column}
                 onCardClick={handleCardClick}
                 isHighlighted={shouldHighlightCompletedColumn}
+              />
+            ))}
+
+            {/* 배송중 컬럼 (배송 완료는 칸반에 표시하지 않음) */}
+            {shippingColumns.map((column) => (
+              <KanbanColumn
+                key={column.process.id}
+                column={column}
+                onCardClick={handleCardClick}
+                isHighlighted={shouldHighlightShippingColumn}
               />
             ))}
           </div>
