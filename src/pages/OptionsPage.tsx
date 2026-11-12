@@ -13,6 +13,7 @@ import {
   selectAll,
   type CopySelectionState,
 } from '@/components/features/option/CopySelectionTree'
+import { DuplicateOptionNameWarning, nextCopyName } from '@/components/features/option/DuplicateOptionNameWarning'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -205,7 +206,7 @@ export function OptionsPage() {
 
   const openCopyDialog = (option: Option) => {
     setCopySource(option)
-    setCopyName(`${option.name} (복사)`)
+    setCopyName(nextCopyName(options, option.name))
     setCopySelection(selectAll(orderAttributes(option.attributes ?? [])))
   }
 
@@ -1109,6 +1110,7 @@ export function OptionsPage() {
               maxLength={200}
               autoFocus
             />
+            <DuplicateOptionNameWarning options={options} name={copyName} />
             {copyRows.length > 0 && (
               <div className="space-y-2 pt-2">
                 <Label>복제할 내용</Label>
@@ -1143,6 +1145,7 @@ export function OptionsPage() {
                 onChange={(e) => setOptionForm({ ...optionForm, name: e.target.value })}
                 placeholder="예: 사이즈, 색상"
               />
+              <DuplicateOptionNameWarning options={options} name={optionForm.name} excludeId={editingOption?.id} />
             </div>
             <div className="space-y-2">
               <Label>설명</Label>
