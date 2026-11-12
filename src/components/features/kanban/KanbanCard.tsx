@@ -5,6 +5,8 @@ import { ChevronUp, ChevronDown, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { CompletedProcessMiniCard } from './CompletedProcessMiniCard'
 import type { KanbanCard as KanbanCardType } from '@/types'
+import { format } from 'date-fns'
+import { ko } from 'date-fns/locale'
 import { formatDueDate } from '@/lib/format'
 
 // 칸반 카드 확장 상태 캐싱
@@ -28,10 +30,14 @@ const STATUS_COLORS = {
   gray: '#9CA3AF',    // 대기/대기중
   blue: '#3B82F6',    // 진행 중
   green: '#10B981',   // 완료
+  amber: '#F59E0B',   // 배송중
 } as const
 
 // 카드 상태에 따른 dot 색상 결정
 const getStatusDotColor = (card: KanbanCardType, isCompletedColumnCard: boolean): string => {
+  if (card.workOrderStatus === 'SHIPPING') {
+    return STATUS_COLORS.amber
+  }
   // 작업 완료 컬럼의 카드
   if (isCompletedColumnCard) {
     // 전체 작업이 완료된 경우 (workOrderStatus가 COMPLETED)
@@ -80,8 +86,15 @@ const getProductLabel = (card: KanbanCardType): string => {
 const getCardKey = (card: KanbanCardType): string =>
   `${card.workOrderId}-${card.workOrderProcessId ?? 'completed'}`
 
-// 작업 완료 컬럼의 카드 (completedProcessInfos가 있는 경우)
+// 작업 완료 · 배송중 컬럼의 카드 (completedProcessInfos가 있는 경우)
 const isCompletedColumnCard = (card: KanbanCardType): boolean => card.completedProcessInfos != null
+
+/** 자동 전환 예정 시각 표시 (예: 11/13 (금) 0시 자동) — 전환은 항상 00시 */
+const formatAutoAt = (value?: string): string =>
+  value ? `${format(new Date(value), 'M/d (EEE)', { locale: ko })} 0시 자동` : '-'
+
+// 배송중 컬럼의 카드
+const isShippingCard = (card: KanbanCardType): boolean => card.workOrderStatus === 'SHIPPING'
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -108,13 +121,16 @@ interface KanbanItemRowProps {
 
 /**
  * 주문 그룹 안의 품목 한 줄 — 품목명 · 상태 점 · 펼치기 버튼, 펼치면 고객/수량/출고(완료 컬럼은 완료 공정 포함)
- * 품목 단위로 드래그해 공정을 이동한다 (작업 완료 컬럼의 품목은 드래그 불가, 완료 공정 미니 카드만 드래그).
+ * 품목 단위로 드래그해 공정을 이동한다.
+ * 작업 완료 품목은 배송중 컬럼으로, 배송중 품목은 작업 완료 컬럼으로 드래그할 수 있다.
+ * 작업 완료 품목 안의 완료 공정 미니 카드는 따로 드래그해 공정을 복구한다 (배송중 품목은 복구 불가).
  *
  * @param {KanbanItemRowProps} props - 칸반 카드 데이터와 클릭 핸들러
  */
 export function KanbanItemRow({ card, onClick }: KanbanItemRowProps) {
   const cardKey = getCardKey(card)
   const completedColumn = isCompletedColumnCard(card)
+  const shipping = isShippingCard(card)
 
   // 캐시된 상태 또는 기본값(닫힘)으로 초기화
   const [isExpanded, setIsExpanded] = useState(() => getExpandedCards().has(cardKey))
@@ -145,7 +161,6 @@ export function KanbanItemRow({ card, onClick }: KanbanItemRowProps) {
   } = useSortable({
     id: `card-${cardKey}`,
     data: { card },
-    disabled: completedColumn,
   })
 
   const style = {
@@ -166,10 +181,10 @@ export function KanbanItemRow({ card, onClick }: KanbanItemRowProps) {
     <div
       ref={setNodeRef}
       style={style}
-      {...(completedColumn ? {} : { ...attributes, ...listeners })}
+      {...attributes}
+      {...listeners}
       className={cn(
-        'bg-white hover:bg-gray-50 transition-colors',
-        completedColumn ? 'cursor-pointer' : 'cursor-grab active:cursor-grabbing',
+        'bg-white hover:bg-gray-50 transition-colors cursor-grab active:cursor-grabbing',
         isDragging && 'opacity-40'
       )}
       onClick={handleClick}
@@ -199,6 +214,10 @@ export function KanbanItemRow({ card, onClick }: KanbanItemRowProps) {
           <DetailRow label="고객" value={getDisplayName(card)} />
           <DetailRow label="수량" value={`${card.quantity.toLocaleString()}개`} />
           <DetailRow label="출고" value={card.dueDate ? formatDueDate(card.dueDate) : '미정'} />
+          {completedColumn && !shipping && card.shippingDueAt && (
+            <DetailRow label="배송중" value={formatAutoAt(card.shippingDueAt)} />
+          )}
+          {shipping && <DetailRow label="배송 완료" value={formatAutoAt(card.deliveryDueAt)} />}
 
           {/* 완료된 공정 미니 카드 리스트 (작업 완료 컬럼) */}
           {completedColumn && card.completedProcessInfos && card.completedProcessInfos.length > 0 && (
@@ -214,6 +233,7 @@ export function KanbanItemRow({ card, onClick }: KanbanItemRowProps) {
                     workOrderId={card.workOrderId}
                     orderName={card.orderName}
                     quantity={card.quantity}
+                    disabled={shipping}
                   />
                 ))}
               </div>

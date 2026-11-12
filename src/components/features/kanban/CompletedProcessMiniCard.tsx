@@ -9,6 +9,8 @@ interface CompletedProcessMiniCardProps {
   workOrderId: number
   orderName: string
   quantity: number
+  /** 배송중 품목처럼 공정 복구를 막아야 할 때 드래그 비활성화 (표시만) */
+  disabled?: boolean
 }
 
 export function CompletedProcessMiniCard({
@@ -16,6 +18,7 @@ export function CompletedProcessMiniCard({
   workOrderId,
   orderName,
   quantity,
+  disabled = false,
 }: CompletedProcessMiniCardProps) {
   // 드래그를 위한 가상 KanbanCard 데이터 생성
   const virtualCard: Partial<KanbanCardType> = {
@@ -38,6 +41,7 @@ export function CompletedProcessMiniCard({
   } = useSortable({
     id: `mini-card-${workOrderId}-${processInfo.workOrderProcessId}`,
     data: { card: virtualCard },
+    disabled,
   })
 
   const style = {
@@ -49,16 +53,17 @@ export function CompletedProcessMiniCard({
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
+      {...(disabled ? {} : { ...attributes, ...listeners })}
       className={cn(
-        'flex items-center gap-2 rounded-md border bg-white p-2 cursor-grab touch-none overflow-hidden',
-        'hover:shadow-md hover:border-primary/50 hover:bg-gray-50 active:cursor-grabbing',
+        'flex items-center gap-2 rounded-md border bg-white p-2 overflow-hidden',
+        disabled
+          ? 'cursor-default'
+          : 'cursor-grab touch-none hover:shadow-md hover:border-primary/50 hover:bg-gray-50 active:cursor-grabbing',
         'transition-all duration-150',
         isDragging && 'opacity-60 shadow-lg scale-105 ring-2 ring-primary'
       )}
     >
-      <GripVertical className="h-4 w-4 text-gray-400 flex-shrink-0" />
+      {!disabled && <GripVertical className="h-4 w-4 text-gray-400 flex-shrink-0" />}
       <CheckCircle2
         className="h-4 w-4 flex-shrink-0"
         style={{ color: processInfo.processColor || '#14b8a6' }}

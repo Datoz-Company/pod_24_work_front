@@ -15,7 +15,20 @@ export const WORK_ORDER_STATUS: Record<WorkOrderStatus, StatusMeta> = {
   PENDING: { label: '대기중', variant: 'secondary' },
   IN_PROGRESS: { label: '작업 중', variant: 'default' },
   COMPLETED: { label: '작업 완료', variant: 'outline' },
+  SHIPPING: { label: '배송중', variant: 'default' },
+  DELIVERED: { label: '배송 완료', variant: 'secondary' },
   REJECTED: { label: '반려', variant: 'destructive' },
+}
+
+/**
+ * 공정 작업이 끝난 상태인지 (작업 완료 이후 단계인 배송중 · 배송 완료 포함) — 백엔드 WorkOrderStatus.WORK_DONE과 같은 기준.
+ * 출고일 지연 표시, 완료 수량 계산 등에 사용한다.
+ *
+ * @param {WorkOrderStatus} status - 작업 상태
+ * @returns {boolean} 작업 완료 · 배송중 · 배송 완료이면 true
+ */
+export function isWorkDone(status: WorkOrderStatus): boolean {
+  return status === 'COMPLETED' || status === 'SHIPPING' || status === 'DELIVERED'
 }
 
 export const PROCESS_STATUS: Record<ProcessStatus, StatusMeta & { badgeClass: string }> = {

@@ -196,6 +196,8 @@ export function ProcessesPage() {
         return '시작'
       case 'COMPLETED':
         return '완료'
+      case 'SHIPPING':
+        return '배송'
       default:
         return '시스템'
     }

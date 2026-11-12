@@ -1,4 +1,4 @@
-export type WorkOrderStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED'
+export type WorkOrderStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'SHIPPING' | 'DELIVERED' | 'REJECTED'
 export type ProcessStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED'
 export type OrderStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
 export type UserRole = 'ADMIN' | 'COMPANY_ADMIN' | 'COMPANY_MANAGER'
@@ -93,7 +93,7 @@ export interface Process {
   color: string
   isActive: boolean
   isSystem?: boolean
-  systemType?: 'PENDING' | 'COMPLETED'
+  systemType?: 'PENDING' | 'COMPLETED' | 'SHIPPING'
 }
 
 export interface Customer {
@@ -144,6 +144,8 @@ export interface WorkOrderSummary {
   dueDate?: string
   createdAt: string
   completedAt?: string
+  shippedAt?: string
+  deliveredAt?: string
 }
 
 export interface Order {
@@ -203,6 +205,8 @@ export interface WorkOrder {
   dueDate?: string
   createdAt: string
   completedAt?: string
+  shippedAt?: string    // 배송중으로 옮긴 시각
+  deliveredAt?: string  // 배송 완료 시각
   memo?: string
 }
 
@@ -233,6 +237,11 @@ export interface KanbanCard {
   processCompletedAt?: string
   // 품목(작업) 전체 완료 시각 (작업 완료 컬럼 정렬·표시)
   workOrderCompletedAt?: string
+  // 작업 완료 컬럼: 배송중 자동 전환 예정 시각 (작업 완료 날짜 + 1일 00시)
+  shippingDueAt?: string
+  // 배송중 컬럼: 배송중으로 옮긴 시각 / 배송 완료 자동 전환 예정 시각 (옮긴 날짜 + 2일 00시)
+  shippedAt?: string
+  deliveryDueAt?: string
   currentProcessOrder?: number
   totalProcesses: number
   // 현재 공정명 (중간 공정 카드용)
