@@ -1,10 +1,18 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, Link2, Unlink, GitBranch, CornerDownRight, AlertTriangle, Info, Check, Copy } from 'lucide-react'
-import { optionService } from '@/services/optionService'
+import { Plus, Pencil, Trash2, ChevronDown, ChevronRight, Link2, Unlink, GitBranch, CornerDownRight, AlertTriangle, Info, Check, Copy, Import } from 'lucide-react'
+import { optionService, type CopySelectionRequest } from '@/services/optionService'
 import { SortableGroup, SortableItem } from '@/components/features/option/SortableList'
 import { CopyAttributeDialog, type CopyAttributeSource } from '@/components/features/option/CopyAttributeDialog'
+import { ImportAttributesDialog } from '@/components/features/option/ImportAttributesDialog'
+import {
+  CopySelectionTree,
+  effectiveSelection,
+  orderAttributes,
+  selectAll,
+  type CopySelectionState,
+} from '@/components/features/option/CopySelectionTree'
 import { DuplicateOptionNameWarning, nextCopyName } from '@/components/features/option/DuplicateOptionNameWarning'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -102,6 +110,10 @@ export function OptionsPage() {
   const [copyName, setCopyName] = useState('')
   // 복사할 속성
   const [copyAttributeSource, setCopyAttributeSource] = useState<CopyAttributeSource | null>(null)
+  // 다른 옵션의 속성을 가져올 옵션
+  const [importTarget, setImportTarget] = useState<Option | null>(null)
+  // 옵션 복제 범위 (기본 전체)
+  const [copySelection, setCopySelection] = useState<CopySelectionState>({ attributeIds: new Set(), valueIds: new Set() })
   const [selectedOptionId, setSelectedOptionId] = useState<number | null>(null)
   const [selectedAttributeId, setSelectedAttributeId] = useState<number | null>(null)
   // 수정 중인 속성/속성값 (null이면 추가 모드)
@@ -166,7 +178,8 @@ export function OptionsPage() {
   })
 
   const copyOptionMutation = useMutation({
-    mutationFn: ({ id, name }: { id: number; name: string }) => optionService.copyOption(id, name),
+    mutationFn: ({ id, name, selection }: { id: number; name: string; selection: CopySelectionRequest }) =>
+      optionService.copyOption(id, name, selection),
     onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['options'] })
       // 새 옵션을 펼쳐서 바로 확인할 수 있게 함
@@ -181,12 +194,20 @@ export function OptionsPage() {
 
   const submitCopy = () => {
     if (!copySource || !copyName.trim() || copyOptionMutation.isPending) return
-    copyOptionMutation.mutate({ id: copySource.id, name: copyName })
+    copyOptionMutation.mutate({
+      id: copySource.id,
+      name: copyName,
+      selection: effectiveSelection(copyRows, copySelection),
+    })
   }
+
+  // 옵션 복제 범위 트리 행 (복제할 옵션의 전체 속성)
+  const copyRows = useMemo(() => (copySource ? orderAttributes(copySource.attributes ?? []) : []), [copySource])
 
   const openCopyDialog = (option: Option) => {
     setCopySource(option)
     setCopyName(nextCopyName(options, option.name))
+    setCopySelection(selectAll(orderAttributes(option.attributes ?? [])))
   }
 
   const deleteOptionMutation = useMutation({
@@ -703,6 +724,15 @@ export function OptionsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
+                      onClick={() => setImportTarget(option)}
+                      title="가져오기 (다른 옵션의 속성 · 값을 골라 추가)"
+                      aria-label={`${option.name}에 가져오기`}
+                    >
+                      <Import className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() =>
                         setDeleteTarget({ type: 'option', id: option.id, name: option.name, option })
                       }
@@ -850,6 +880,7 @@ export function OptionsPage() {
                                         값
                                       </Button>
                                     )}
+
                                     <Button
                                       variant="ghost"
                                       size="icon"
@@ -961,7 +992,9 @@ export function OptionsPage() {
                                         )
                                       })}
                                       {attr.values.length === 0 && (
-                                        <span className="text-sm text-muted-foreground italic">값이 없습니다</span>
+                                        <span className="text-sm text-muted-foreground italic">
+                                          값이 없습니다
+                                        </span>
                                       )}
                                     </SortableGroup>
                                   )}
@@ -1037,14 +1070,22 @@ export function OptionsPage() {
         onCopied={(optionId) => setExpandedOptions((prev) => new Set(prev).add(optionId))}
       />
 
+      {/* 값 가져오기 다이얼로그 */}
+      <ImportAttributesDialog
+        target={importTarget}
+        options={options}
+        onClose={() => setImportTarget(null)}
+        onImported={(optionId) => setExpandedOptions((prev) => new Set(prev).add(optionId))}
+      />
+
       {/* 옵션 복제 다이얼로그 */}
       <Dialog open={copySource != null} onOpenChange={(open) => !open && setCopySource(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>옵션 복제 - {copySource?.name}</DialogTitle>
             <DialogDescription>
-              속성 {copySource?.attributes?.length ?? 0}개와 값, 하위 연결까지 그대로 복사한 새 옵션을 만듭니다.
-              상품 연결은 복사하지 않습니다.
+              속성 {copySource?.attributes?.length ?? 0}개와 값, 하위 연결까지 복사한 새 옵션을 만듭니다. 뺄 항목은 체크를
+              해제하세요. 상품 연결은 복사하지 않습니다.
             </DialogDescription>
           </DialogHeader>
           <form
@@ -1070,6 +1111,12 @@ export function OptionsPage() {
               autoFocus
             />
             <DuplicateOptionNameWarning options={options} name={copyName} />
+            {copyRows.length > 0 && (
+              <div className="space-y-2 pt-2">
+                <Label>복제할 내용</Label>
+                <CopySelectionTree rows={copyRows} selection={copySelection} onChange={setCopySelection} />
+              </div>
+            )}
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" onClick={() => setCopySource(null)}>
                 취소
