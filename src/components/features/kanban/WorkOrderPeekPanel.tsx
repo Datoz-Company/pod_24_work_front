@@ -140,6 +140,8 @@ export function WorkOrderPeekPanel({
     }
   }
 
+  const hasOptions = (workOrder?.options?.length ?? 0) > 0
+
   // 상위 주문 링크 breadcrumb
   const breadcrumb = workOrder?.order ? (
     <Link
@@ -206,13 +208,16 @@ export function WorkOrderPeekPanel({
                     {workOrder.product?.name ?? '-'}
                   </span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <Hash className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">수량</span>
-                  <span className="ml-auto text-sm font-medium">
-                    {workOrder.quantity.toLocaleString()}개
-                  </span>
-                </div>
+                {/* 수량은 옵션 영역으로 옮김 — 옵션이 없을 때만 여기 표시 */}
+                {!hasOptions && (
+                  <div className="flex items-center gap-3">
+                    <Hash className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">수량</span>
+                    <span className="ml-auto text-sm font-medium">
+                      {workOrder.quantity.toLocaleString()}개
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center gap-3">
                   <User className="h-4 w-4 text-muted-foreground" />
                   <span className="text-sm text-muted-foreground">주문자</span>
@@ -337,10 +342,14 @@ export function WorkOrderPeekPanel({
             </PeekPanelSection>
 
             {/* 옵션 정보 */}
-            {workOrder.options && workOrder.options.length > 0 && (
+            {hasOptions && (
               <PeekPanelSection title="옵션" className="border-t">
                 {/* 가격은 관리자에게만 (작업 현황은 직원도 보는 화면) */}
-                <WorkOrderOptionsView options={workOrder.options} showPrices={canViewPrices} />
+                <WorkOrderOptionsView
+                  options={workOrder.options ?? []}
+                  showPrices={canViewPrices}
+                  quantity={workOrder.quantity}
+                />
               </PeekPanelSection>
             )}
 
