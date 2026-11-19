@@ -6,19 +6,21 @@ interface WorkOrderOptionsViewProps {
   options: readonly WorkOrderOption[]
   /** 가격 표시 여부 — 작업 화면은 직원도 보므로 관리자에게만 */
   showPrices?: boolean
+  /** 작업 수량 — 주면 첫 옵션 이름 바로 아래에 보여준다 (작업자가 옵션을 보면서 수량도 확인) */
+  quantity?: number
 }
 
 /**
  * 작업 옵션 표시 — 칸반 패널과 작업 상세에서 공용
  */
-export function WorkOrderOptionsView({ options, showPrices = false }: WorkOrderOptionsViewProps) {
+export function WorkOrderOptionsView({ options, showPrices = false, quantity }: WorkOrderOptionsViewProps) {
   if (options.length === 0) {
     return <p className="text-sm text-muted-foreground">선택한 옵션이 없습니다.</p>
   }
 
   return (
     <div className="divide-y">
-      {options.map((option) => {
+      {options.map((option, index) => {
         const { optionName, lines } = describeOption(option)
         return (
           <div key={option.id} className="space-y-2 py-3 first:pt-0 last:pb-0">
@@ -30,6 +32,12 @@ export function WorkOrderOptionsView({ options, showPrices = false }: WorkOrderO
                 </span>
               )}
             </div>
+            {index === 0 && quantity !== undefined && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="min-w-[72px] text-xs text-muted-foreground">수량</span>
+                <span className="font-semibold">{quantity.toLocaleString()}개</span>
+              </div>
+            )}
             {lines.length > 0 && (
               <div className="space-y-1.5">
                 {lines.map((line) => (
