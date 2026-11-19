@@ -1,6 +1,6 @@
 // 다음(카카오) 우편번호 서비스 — 무료, API 키 불필요
-// https://postcode.map.daum.net/guide
-const SCRIPT_URL = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js'
+// https://postcode.map.kakao.com/guide
+const SCRIPT_URL = 'https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js'
 
 export interface PostcodeResult {
   zonecode: string
