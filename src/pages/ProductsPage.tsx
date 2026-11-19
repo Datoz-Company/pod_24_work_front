@@ -42,6 +42,7 @@ import { getCategories, UNCATEGORIZED } from '@/components/features/order/OrderI
 import type { Product, ProductCreateRequest } from '@/types'
 import type { Option, ProductOption, ProductOptionItem } from '@/types/option'
 import { OPTION_TYPE_LABELS } from '@/types/option'
+import { filterByName } from '@/lib/search'
 
 export function ProductsPage() {
   const queryClient = useQueryClient()
@@ -52,6 +53,7 @@ export function ProductsPage() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [selectedProductForOptions, setSelectedProductForOptions] = useState<Product | null>(null)
+  const [optionSearch, setOptionSearch] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null)
   const [renameTarget, setRenameTarget] = useState<string | null>(null)
   const [renameTo, setRenameTo] = useState('')
@@ -204,6 +206,7 @@ export function ProductsPage() {
 
   const openOptionDialog = (product: Product) => {
     setSelectedProductForOptions(product)
+    setOptionSearch('')
     setIsOptionDialogOpen(true)
   }
 
@@ -287,6 +290,8 @@ export function ProductsPage() {
   const availableOptions = allOptions.filter(
     (option) => !productOptions.some((po) => po.optionId === option.id)
   )
+  const optionKeyword = optionSearch.trim()
+  const filteredAvailableOptions = filterByName(availableOptions, optionKeyword)
 
   return (
     <div className="p-6">
@@ -541,14 +546,51 @@ export function ProductsPage() {
 
               {/* 추가 가능한 옵션 목록 */}
               <div>
-                <Label className="text-sm font-medium">추가 가능한 옵션</Label>
+                <div className="flex items-center justify-between gap-3">
+                  <Label className="whitespace-nowrap text-sm font-medium">
+                    추가 가능한 옵션
+                    {availableOptions.length > 0 && (
+                      <span className="ml-1 text-xs font-normal text-muted-foreground">
+                        {optionKeyword
+                          ? `${filteredAvailableOptions.length} / ${availableOptions.length}개`
+                          : `${availableOptions.length}개`}
+                      </span>
+                    )}
+                  </Label>
+                  {availableOptions.length > 0 && (
+                    <div className="relative w-48">
+                      <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={optionSearch}
+                        onChange={(e) => setOptionSearch(e.target.value)}
+                        placeholder="옵션 이름 검색"
+                        aria-label="추가 가능한 옵션 검색"
+                        className="h-8 pl-8 pr-7"
+                      />
+                      {optionSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setOptionSearch('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          aria-label="검색어 지우기"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
                 {availableOptions.length === 0 ? (
                   <p className="mt-2 text-sm text-muted-foreground">
                     추가 가능한 옵션이 없습니다. 옵션 관리에서 새 옵션을 생성하세요.
                   </p>
+                ) : filteredAvailableOptions.length === 0 ? (
+                  <p className="mt-2 py-6 text-center text-sm text-muted-foreground">
+                    "{optionSearch.trim()}"에 맞는 옵션이 없습니다.
+                  </p>
                 ) : (
                   <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
-                    {availableOptions.map((option) => (
+                    {filteredAvailableOptions.map((option) => (
                       <div
                         key={option.id}
                         className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50"

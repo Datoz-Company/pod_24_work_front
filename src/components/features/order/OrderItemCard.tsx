@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { OptionSelector } from '@/components/features/option/OptionSelector'
+import { ProductCombobox } from '@/components/features/product/ProductCombobox'
 import { optionService } from '@/services/optionService'
 import { cn } from '@/lib/utils'
 import type { Product } from '@/types'
@@ -114,12 +115,13 @@ export function OrderItemCard({ item, index, products, canDelete, onChange, onRe
     onChange({ category, productId: 0, processIds: [], options: [] })
   }
 
-  const handleProductChange = (productId: number) => {
-    const product = products.find((p) => p.id === productId)
+  // 상품 종류를 안 골랐으면 전체 상품에서 검색 — 상품을 고르면 종류도 같이 채움
+  const handleProductChange = (product: Product) => {
     onChange({
-      productId,
+      category: product.category?.trim() || UNCATEGORIZED,
+      productId: product.id,
       options: [],
-      processIds: product?.processes?.filter((p) => !p.isSystem).map((p) => p.id) ?? [],
+      processIds: product.processes?.filter((p) => !p.isSystem).map((p) => p.id) ?? [],
     })
   }
 
@@ -178,20 +180,14 @@ export function OrderItemCard({ item, index, products, canDelete, onChange, onRe
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">상품 *</Label>
-              <Select
-                value={item.productId ? String(item.productId) : ''}
-                onValueChange={(v) => handleProductChange(Number(v))}
-                disabled={!item.category || lockProduct}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={item.category ? '상품 선택' : '상품 종류를 먼저 선택하세요'} />
-                </SelectTrigger>
-                <SelectContent>
-                  {productsInCategory.map((product) => (
-                    <SelectItem key={product.id} value={String(product.id)}>{product.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ProductCombobox
+                value={item.productId}
+                onChange={handleProductChange}
+                products={item.category ? productsInCategory : products}
+                showCategory={!item.category}
+                placeholder={item.category ? '상품 검색 또는 선택' : '전체 상품에서 검색'}
+                disabled={lockProduct}
+              />
             </div>
           </div>
 
